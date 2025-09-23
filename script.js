@@ -1,38 +1,27 @@
-let image, atlasData;
-
-document.getElementById('pngInput').addEventListener('change', e => {
-  const reader = new FileReader();
-  reader.onload = ev => {
-    image = new Image();
-    image.src = ev.target.result;
-  };
-  reader.readAsDataURL(e.target.files[0]);
-});
-
-document.getElementById('jsonInput').addEventListener('change', e => {
-  const reader = new FileReader();
-  reader.onload = ev => { atlasData = JSON.parse(ev.target.result); };
-  reader.readAsText(e.target.files[0]);
-});
-
 document.getElementById('convertir').addEventListener('click', () => {
   if (!image || !atlasData) return alert('Falta cargar PNG o JSON');
 
   const frames = atlasData.ATLAS.SPRITES.map(s => s.SPRITE);
-  const fw = frames[0].w, fh = frames[0].h;
-  const canvas = document.getElementById('resultado');
-  canvas.width = fw * frames.length;
-  canvas.height = fh;
-  const ctx = canvas.getContext('2d');
 
   frames.forEach((f, i) => {
-    ctx.drawImage(image, f.x, f.y, f.w, f.h, i * fw, 0, f.w, f.h);
+    // Crear un canvas para cada frame
+    const c = document.createElement('canvas');
+    c.width = f.w;
+    c.height = f.h;
+    const ctx = c.getContext('2d');
+
+    // Dibujar solo la región correspondiente
+    ctx.drawImage(image, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+
+    // Generar enlace de descarga automático
+    const link = document.createElement('a');
+    link.download = `${f.name || 'frame'}_${i}.png`; // nombre de archivo
+    link.href = c.toDataURL('image/png');
+    link.textContent = `Descargar ${f.name || i}`;
+    link.style.display = 'block';
+    document.body.appendChild(link);
   });
+
+  alert(`Listo: se generaron ${frames.length} imágenes (aparecen enlaces de descarga en la página).`);
 });
 
-document.getElementById('descargar').addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.download = 'spritesheet_horizontal.png';
-  link.href = document.getElementById('resultado').toDataURL('image/png');
-  link.click();
-});
