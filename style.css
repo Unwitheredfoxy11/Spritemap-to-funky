@@ -1,0 +1,8 @@
+body {
+  font-family: sans-serif;
+  text-align: center;
+  padding: 1rem;
+}
+.inputs { margin: 1rem 0; }
+canvas { border: 1px solid #ccc; margin-top: 1rem; max-width: 100%; }
+button { margin: 0.5rem; padding: 0.5rem 1rem; }

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversor Spritesheet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Conversor a Spritesheet Horizontal</h1>
+
+  <div class="inputs">
+    <label>PNG de Adobe Animate:
+      <input id="pngInput" type="file" accept="image/png">
+    </label>
+    <label>JSON del atlas:
+      <input id="jsonInput" type="file" accept=".json">
+    </label>
+  </div>
+
+  <button id="convertir">Generar Spritesheet</button>
+  <canvas id="resultado"></canvas>
+  <button id="descargar">Descargar PNG</button>
+
+  <script src="script.js"></script>
+</body>
+</html>
