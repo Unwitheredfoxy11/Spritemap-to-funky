@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Conversor Spritesheet</title>
+  <title>Exportar piezas a ZIP</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Conversor a Spritesheet Horizontal</h1>
+  <h1>Conversor de Spritemap a ZIP</h1>
 
   <div class="inputs">
     <label>PNG de Adobe Animate:
@@ -18,10 +18,11 @@
     </label>
   </div>
 
-  <button id="convertir">Generar Spritesheet</button>
-  <canvas id="resultado"></canvas>
-  <button id="descargar">Descargar PNG</button>
+  <button id="convertir">Exportar a ZIP</button>
+  <p id="status"></p>
 
+  <script src="jszip.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
+
