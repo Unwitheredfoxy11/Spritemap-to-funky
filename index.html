@@ -1,27 +1,33 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Exportar piezas a ZIP</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Conversor de Spritemap a ZIP</h1>
+  <h1>Conversor Spritemap → PNGs (ZIP)</h1>
 
   <div class="inputs">
     <label>PNG de Adobe Animate:
       <input id="pngInput" type="file" accept="image/png">
     </label>
+
     <label>JSON del atlas:
       <input id="jsonInput" type="file" accept=".json">
     </label>
   </div>
 
-  <button id="convertir">Exportar a ZIP</button>
-  <p id="status"></p>
+  <div class="controls">
+    <button id="convertir">Exportar a ZIP</button>
+    <button id="openZipTab" style="display:none">Abrir ZIP en nueva pestaña</button>
+  </div>
 
-  <script src="jszip.min.js"></script>
+  <p id="status">Esperando archivos...</p>
+
+  <!-- JSZip: CDN o archivo local -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
