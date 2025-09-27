@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Exportar piezas a ZIP</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Conversor Spritemap → PNGs (ZIP)</h1>
+
+  <div class="inputs">
+    <label>PNG de Adobe Animate:
+      <input id="pngInput" type="file" accept="image/png">
+    </label>
+
+    <label>JSON del atlas:
+      <input id="jsonInput" type="file" accept=".json">
+    </label>
+    
+    <label>Animation.json (opcional):
+      <input id="animInput" type="file" accept=".json">
+    </label>
+  </div>
+
+  <div class="controls">
+    <button id="convertir">Exportar a ZIP</button>
+    <button id="openZipTab" style="display:none">Abrir ZIP en nueva pestaña</button>
+  </div>
+
+  <p id="status">Esperando archivos...</p>
+
+  <!-- Librería JSZip primero -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+
+  <!-- Luego los módulos, en este orden -->
+  <script src="atlas.js"></script>
+  <script src="anim.js"></script>
+  <script src="ui.js"></script>
+
+  <footer class="footer">
+    <p>me cago en tu puta madre jarret</p>
+  </footer>
+</body>
+</html>
