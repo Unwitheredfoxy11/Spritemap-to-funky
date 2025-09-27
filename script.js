@@ -339,21 +339,27 @@ async function exportFramesFromAnimationToZip(){
     }
 
     setStatus('Comprimiendo ZIP...');
-    const zipBlob = await zip.generateAsync({type:'blob'}, m=> setStatus(`Comprimiendo... ${Math.round(m.percent)}%`));
+const zipBlob = await zip.generateAsync(
+  {type:'blob'},
+  m => setStatus(`Comprimiendo... ${Math.round(m.percent)}%`)
+);
 
-    if(lastZipUrl) URL.revokeObjectURL(lastZipUrl);
-    lastZipUrl = URL.createObjectURL(zipBlob);
+if (lastZipUrl) URL.revokeObjectURL(lastZipUrl);
+lastZipUrl = URL.createObjectURL(zipBlob);
 
-    // disparar descarga
-    const a = document.createElement('a');
-    a.href = lastZipUrl;
-    a.download = 'frames_construidos.zip';
-    a.click();
+const a = document.createElement('a');
+a.href = lastZipUrl;
+a.download = 'frames_construidos.zip';
+a.click();
 
-    openZipBtn.style.display = 'inline-block';
-    openZipBtn.onclick = ()=>window.open(lastZipUrl,'_blank');
+openZipBtn.style.display = 'inline-block';
+openZipBtn.onclick = () => window.open(lastZipUrl, '_blank');
 
-    setStatus(`Listo: ${framesIndices.length} frames exportados en frames_construidos.zip`);
+setStatus(`Listo: ${framesIndices.length} frames exportados en frames_construidos.zip`);
+
+// 👉 DEVOLVER EL BLOB
+return zipBlob;
+}
 
   }catch(err){
     console.error(err);
@@ -364,7 +370,6 @@ async function exportFramesFromAnimationToZip(){
   // <--- Aquí permanece tu función original intacta,
   // la que reconstruye y exporta los frames de la animación
   // (todo lo que ya tenías abajo, sin cambios).
-}
 
 // =======================
 // Botón principal
