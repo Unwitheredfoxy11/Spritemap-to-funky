@@ -355,21 +355,13 @@ a.click();
 openZipBtn.style.display = 'inline-block';
 openZipBtn.onclick = () => window.open(lastZipUrl, '_blank');
 
-setStatus(`Listo: ${framesIndices.length} frames exportados en frames_construidos.zip`);
-
-// 👉 DEVOLVER EL BLOB
-return zipBlob;
-}
-
-  }catch(err){
+    setStatus(`Listo: ${framesIndices.length} frames exportados en frames_construidos.zip`);
+    return zipBlob;
+  } catch(err){
     console.error(err);
     setStatus('Error: ' + (err.message || err));
   }
 }
-
-  // <--- Aquí permanece tu función original intacta,
-  // la que reconstruye y exporta los frames de la animación
-  // (todo lo que ya tenías abajo, sin cambios).
 
 // =======================
 // Botón principal
