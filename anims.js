@@ -1,8 +1,8 @@
-// anim.js
-// --- Reconstruye cada frame usando Animation.json y el atlas ---
+// anim_hibrido.js
+// Reconstruye frames desde anim.json y atlas, con tolerancia a errores
 
 (function () {
-  // Utilidades de matrices 2D
+  // --- utilidades ---
   function m3dToAffine(m3d) {
     return {
       a: m3d?.[0] ?? 1, b: m3d?.[1] ?? 0,
@@ -24,6 +24,40 @@
     return { x: m.a * x + m.c * y + m.tx, y: m.b * x + m.d * y + m.ty };
   }
 
+  function normalizeForMatch(s) {
+    return String(s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase().replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[_\-\/\\]+/g, ' ')
+      .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+  function similarityScore(a, b) {
+    a = String(a || ''); b = String(b || '');
+    const maxL = Math.max(a.length, b.length);
+    if (maxL === 0) return 1;
+    const dist = levenshtein(a, b);
+    return 1 - (dist / maxL);
+  }
+  function levenshtein(a, b) {
+    const al = a.length, bl = b.length;
+    if (al === 0) return bl;
+    if (bl === 0) return al;
+    const v0 = new Array(bl + 1), v1 = new Array(bl + 1);
+    for (let j = 0; j <= bl; j++) v0[j] = j;
+    for (let i = 0; i < al; i++) {
+      v1[0] = i + 1;
+      for (let j = 0; j < bl; j++) {
+        const cost = a[i] === b[j] ? 0 : 1;
+        v1[j + 1] = Math.min(v1[j] + 1, v0[j + 1] + 1, v0[j] + cost);
+      }
+      for (let j = 0; j <= bl; j++) v0[j] = v1[j];
+    }
+    return v1[bl];
+  }
+
+  // --- construir mapas ---
   function buildAtlasMap(data) {
     const map = {};
     (data?.ATLAS?.SPRITES || []).forEach(it => {
@@ -49,8 +83,26 @@
     return [...set].sort((a, b) => a - b);
   }
 
-  function collectCommands(mainTL, symbols, atlas, idx) {
+  // --- recolector de comandos con fallback ---
+  function collectCommands(mainTL, symbols, atlas, idx, pieceKeys) {
     const out = [];
+
+    function findAtlasKey(ref) {
+      if (!ref) return null;
+      if (atlas[ref]) return ref;
+      const normRef = normalizeForMatch(ref);
+      let best = null, bestScore = 0;
+      for (const k in atlas) {
+        const score = similarityScore(normRef, normalizeForMatch(k));
+        if (score > bestScore) { best = k; bestScore = score; }
+      }
+      if (bestScore > 0.25) {
+        console.warn(`⚠️ Fuzzy match: "${ref}" → "${best}"`);
+        return best;
+      }
+      return null;
+    }
+
     function recurse(name, localFrame, tf) {
       const sym = symbols[name];
       if (!sym?.TL?.L) return;
@@ -61,10 +113,11 @@
         if (!fr) return;
         (fr.E || []).forEach(el => {
           if (el.ASI) {
-            const rect = atlas[el.ASI.N];
-            if (!rect) return;
+            const rectKey = findAtlasKey(el.ASI.N);
+            if (!rectKey) return;
+            const rect = atlas[rectKey];
             const m = m3dToAffine(el.ASI.M3D || []);
-            out.push({ rect, transform: mulAffine(tf, m), sourceName: el.ASI.N });
+            out.push({ rect, transform: mulAffine(tf, m), sourceName: rectKey });
           } else if (el.SI) {
             const m = m3dToAffine(el.SI.M3D || []);
             recurse(el.SI.SN, localFrame - (fr.I || 0), mulAffine(tf, m));
@@ -72,6 +125,7 @@
         });
       });
     }
+
     (mainTL.L || []).forEach(layer => {
       const fr = (layer.FR || []).find(r =>
         idx >= (r.I || 0) && idx < (r.I || 0) + (r.DU || 1)
@@ -79,19 +133,21 @@
       if (!fr) return;
       (fr.E || []).forEach(el => {
         if (el.ASI) {
-          const rect = atlas[el.ASI.N];
-          if (!rect) return;
-          out.push({ rect, transform: m3dToAffine(el.ASI.M3D || []), sourceName: el.ASI.N });
+          const rectKey = findAtlasKey(el.ASI.N);
+          if (!rectKey) return;
+          out.push({ rect: atlas[rectKey], transform: m3dToAffine(el.ASI.M3D || []), sourceName: rectKey });
         } else if (el.SI) {
           recurse(el.SI.SN, idx - (fr.I || 0), m3dToAffine(el.SI.M3D || []));
         }
       });
     });
+
     return out;
   }
 
+  // --- bounding box y dibujo ---
   function bbox(commands) {
-    if (!commands.length) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+    if (!commands.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     commands.forEach(cmd => {
       const r = cmd.rect;
@@ -126,16 +182,17 @@
     return c;
   }
 
-  function frameName(commands) {
+  function frameName(commands, idx) {
     const names = [...new Set(commands.map(c => c.sourceName))];
-    return (names[0] || 'frame').replace(/[^\w\-]/g, '_');
+    return (names[0] || 'frame') + "_" + String(idx).padStart(4, "0");
   }
 
+  // --- exportación ---
   async function exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus) {
     const atlas = buildAtlasMap(atlasData);
     const symbols = buildSymbolMap(animData);
-    const mainTL = animData?.AN?.TL;
-    if (!mainTL?.L) throw new Error('Timeline principal no encontrada');
+    const mainTL = animData?.AN?.TL || animData?.TL;
+    if (!mainTL?.L) throw new Error('❌ Timeline principal no encontrada');
 
     const frames = collectFrameIndices(mainTL);
     const zip = new JSZip();
@@ -145,11 +202,17 @@
       const idx = frames[i];
       setStatus?.(`Procesando frame ${i + 1}/${frames.length}`);
       const cmds = collectCommands(mainTL, symbols, atlas, idx);
-      if (!cmds.length) continue;
+      if (!cmds.length) {
+        // Frame vacío → placeholder
+        const tiny = document.createElement('canvas'); tiny.width = 1; tiny.height = 1;
+        const blob = await new Promise(res => tiny.toBlob(res, 'image/png'));
+        folder.file(`empty_${String(idx).padStart(4, '0')}.png`, blob);
+        continue;
+      }
       const box = bbox(cmds);
       const canvas = draw(cmds, box, atlasImage);
       const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-      folder.file(`${frameName(cmds)}_${String(idx).padStart(4, '0')}.png`, blob);
+      folder.file(frameName(cmds, idx) + ".png", blob);
       await new Promise(r => setTimeout(r, 0));
     }
 
@@ -162,4 +225,3 @@
 
   window.exportFramesFromAnimationToZip = exportFramesFromAnimationToZip;
 })();
-
