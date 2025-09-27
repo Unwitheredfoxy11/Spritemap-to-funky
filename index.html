@@ -18,10 +18,9 @@
       <input id="jsonInput" type="file" accept=".json">
     </label>
     
-    <label>Animation.json:
+    <label>Animation.json (opcional):
       <input id="animInput" type="file" accept=".json">
     </label>
-
   </div>
 
   <div class="controls">
@@ -31,13 +30,16 @@
 
   <p id="status">Esperando archivos...</p>
 
-  <!-- JSZip: CDN o archivo local -->
+  <!-- Librería JSZip primero -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="script.js"></script>
 
-  <footer class=footer>
-  <p>Foxy es joto</p>
+  <!-- Luego los módulos, en este orden -->
+  <script src="atlas.js"></script>
+  <script src="anim.js"></script>
+  <script src="ui.js"></script>
+
+  <footer class="footer">
+    <p>me cago en tu puta madre jarret</p>
   </footer>
 </body>
 </html>
-
