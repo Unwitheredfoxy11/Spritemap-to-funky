@@ -361,8 +361,6 @@ async function exportFramesFromAnimationToZip(){
   }
 }
 
-
-
   // <--- Aquí permanece tu función original intacta,
   // la que reconstruye y exporta los frames de la animación
   // (todo lo que ya tenías abajo, sin cambios).
