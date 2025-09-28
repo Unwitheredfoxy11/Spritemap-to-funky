@@ -12,171 +12,167 @@
 // ya me canse...
 // anims.js - Genera frames individuales desde Animation.json y Atlas
 // cuantos cambios llevo?
+// ui.js
 (function() {
+  let atlasImage=null, atlasData=null, animData=null, lastZipUrl=null;
+  let animFrames=[], animFrameIndex=0, animTimer=null;
 
-  // --- Transformaciones ---
-  function m3dToAffine(m3d) {
-    return {
-      a: m3d?.[0] ?? 1, b: m3d?.[1] ?? 0,
-      c: m3d?.[4] ?? 0, d: m3d?.[5] ?? 1,
-      tx: m3d?.[12] ?? 0, ty: m3d?.[13] ?? 0
+  const pngInput  = document.getElementById('pngInput');
+  const jsonInput = document.getElementById('jsonInput');
+  const animInput = document.getElementById('animInput');
+  const dropBoxPng   = document.getElementById('dropBoxPng');
+  const dropBoxAtlas = document.getElementById('dropBoxAtlas');
+  const dropBoxAnim  = document.getElementById('dropBoxAnim');
+
+  const statusEl  = document.getElementById('status');
+  const btn       = document.getElementById('convertir');
+  const openZip   = document.getElementById('openZipTab');
+
+  const previewPNG  = document.getElementById('previewPNG');
+  const previewAnim = document.getElementById('previewAnim');
+
+  const setStatus = m=>{ statusEl.textContent=m; console.log(m); };
+
+  const fileToText = f=>new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+    r.readAsText(f);
+  });
+  const fileToDataURL = f=>new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+    r.readAsDataURL(f);
+  });
+
+  function assignFileToInput(file,input){
+    const dt=new DataTransfer();
+    dt.items.add(file);
+    input.files=dt.files;
+  }
+
+  function setupDropBox(dropBox,input,onLoadFile){
+    dropBox.addEventListener('dragover',e=>{ e.preventDefault(); dropBox.classList.add('hover'); });
+    dropBox.addEventListener('dragleave',e=>{ e.preventDefault(); dropBox.classList.remove('hover'); });
+    dropBox.addEventListener('drop',async e=>{
+      e.preventDefault();
+      dropBox.classList.remove('hover');
+      const files = e.dataTransfer.files;
+      for(const f of files) assignFileToInput(f,input);
+      input.dispatchEvent(new Event('change'));
+    });
+
+    input.addEventListener('change',async e=>{
+      const f=e.target.files[0]; if(!f) return;
+      await onLoadFile(f);
+    });
+  }
+
+  // --- PNG ---
+  setupDropBox(dropBoxPng,pngInput,async file=>{
+    const img=new Image();
+    img.onload=()=>{
+      atlasImage=img;
+      setStatus('PNG cargado');
+      previewPNG.width=img.width/2;
+      previewPNG.height=img.height/2;
+      previewPNG.style.display='block';
+      const ctx=previewPNG.getContext('2d');
+      ctx.clearRect(0,0,previewPNG.width,previewPNG.height);
+      ctx.drawImage(img,0,0,previewPNG.width,previewPNG.height);
     };
-  }
+    img.src=await fileToDataURL(file);
+  });
 
-  function mulAffine(m1, m2) {
-    return {
-      a: m1.a*m2.a + m1.c*m2.b,
-      b: m1.b*m2.a + m1.d*m2.b,
-      c: m1.a*m2.c + m1.c*m2.d,
-      d: m1.b*m2.c + m1.d*m2.d,
-      tx: m1.a*m2.tx + m1.c*m2.ty + m1.tx,
-      ty: m1.b*m2.tx + m1.d*m2.ty + m1.ty
-    };
-  }
+  // --- Atlas JSON ---
+  setupDropBox(dropBoxAtlas,jsonInput,async file=>{
+    atlasData=JSON.parse(await fileToText(file));
+    setStatus('Atlas JSON cargado');
+  });
 
-  function transformPoint(m,x,y) {
-    return { x:m.a*x + m.c*y + m.tx, y:m.b*x + m.d*y + m.ty };
-  }
+  // --- Animation JSON ---
+  setupDropBox(dropBoxAnim,animInput,async file=>{
+    animData=JSON.parse(await fileToText(file));
+    setStatus('Animation.json cargado');
+    buildAnimPreview();
+  });
 
-  // --- Mapas ---
-  function buildAtlasMap(data) {
-    const map = {};
-    (data?.ATLAS?.SPRITES || []).forEach(it => {
-      const s = it.SPRITE;
-      map[s.name] = { x:s.x, y:s.y, w:s.w, h:s.h };
-    });
-    return map;
-  }
+  // --- Previsualización ---
+  async function buildAnimPreview(){
+    if(!atlasImage||!animData) return;
+    setStatus('Generando previsualización...');
+    try{
+      animFrames=[];
+      const mainTL=animData?.AN?.TL || animData?.TL;
+      const frames=window.collectFrameIndices ? window.collectFrameIndices(mainTL) : [...Array(10).keys()];
 
-  function buildSymbolMap(data) {
-    const map = {};
-    (data?.SD?.S || []).forEach(s => map[s.SN] = s);
-    return map;
-  }
-
-  function collectFrameIndices(tl) {
-    const set = new Set();
-    (tl.L || []).forEach(layer =>
-      (layer.FR || []).forEach(fr => {
-        const start = fr.I || 0;
-        const dur = fr.DU || 1;
-        for(let k=start;k<start+dur;k++) set.add(k);
-      })
-    );
-    return [...set].sort((a,b)=>a-b);
-  }
-
-  // --- Comandos ---
-  function collectCommands(mainTL, symbols, atlas, idx) {
-    const out = [];
-
-    function recurse(name, localFrame, tf) {
-      const sym = symbols[name];
-      if (!sym?.TL?.L) return;
-      sym.TL.L.forEach(layer => {
-        const fr = (layer.FR || []).find(r =>
-          localFrame >= (r.I||0) && localFrame < (r.I||0) + (r.DU||1)
-        );
-        if (!fr) return;
-        (fr.E||[]).forEach(el => {
-          if(el.ASI){
-            const rect = atlas[el.ASI.N];
-            if(!rect) throw new Error(`Imagen no encontrada: ${el.ASI.N}`);
-            const m = m3dToAffine(el.ASI.M3D||[]);
-            out.push({rect, transform:mulAffine(tf,m), sourceName:el.ASI.N});
-          } else if(el.SI){
-            const m = m3dToAffine(el.SI.M3D||[]);
-            recurse(el.SI.SN, localFrame-(fr.I||0), mulAffine(tf,m));
-          }
-        });
-      });
-    }
-
-    (mainTL.L||[]).forEach(layer => {
-      const fr = (layer.FR||[]).find(r => idx >= (r.I||0) && idx < (r.I||0)+(r.DU||1));
-      if(!fr) return;
-      (fr.E||[]).forEach(el => {
-        if(el.ASI){
-          const rect = atlas[el.ASI.N];
-          if(!rect) throw new Error(`Imagen no encontrada: ${el.ASI.N}`);
-          const m = m3dToAffine(el.ASI.M3D||[]);
-          out.push({rect, transform:m, sourceName:el.ASI.N});
-        } else if(el.SI){
-          recurse(el.SI.SN, idx-(fr.I||0), m3dToAffine(el.SI.M3D||[]));
-        }
-      });
-    });
-
-    return out;
-  }
-
-  // --- Dibujo ---
-  function isFullyTransparent(canvas) {
-    const ctx = canvas.getContext('2d');
-    const data = ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    for(let i=3;i<data.length;i+=4) if(data[i]!==0) return false;
-    return true;
-  }
-
-  function drawFrame(commands, atlasImage) {
-    const canvases = [];
-    commands.forEach(cmd=>{
-      const c = document.createElement('canvas');
-      c.width = cmd.rect.w;
-      c.height = cmd.rect.h;
-      const ctx = c.getContext('2d');
-      ctx.setTransform(cmd.transform.a,cmd.transform.b,cmd.transform.c,cmd.transform.d,cmd.transform.tx,cmd.transform.ty);
-      ctx.drawImage(atlasImage, cmd.rect.x, cmd.rect.y, cmd.rect.w, cmd.rect.h, 0,0,cmd.rect.w,cmd.rect.h);
-      if(!isFullyTransparent(c)) canvases.push(c);
-    });
-    return canvases;
-  }
-
-  // --- Exportar a ZIP ---
-  async function exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus) {
-    const atlas = buildAtlasMap(atlasData);
-    const symbols = buildSymbolMap(animData);
-    const mainTL = animData?.AN?.TL || animData?.TL;
-    const frames = collectFrameIndices(mainTL);
-    const zip = new JSZip();
-    const folder = zip.folder('frames');
-
-    for(let i=0;i<frames.length;i++){
-      const idx = frames[i];
-      setStatus?.(`Procesando frame ${i+1}/${frames.length}`);
-      try{
-        const cmds = collectCommands(mainTL, symbols, atlas, idx);
-        let canvases = drawFrame(cmds, atlasImage);
-        if(!canvases.length){
-          console.warn(`Frame ${idx} vacío, reconstruyendo...`);
+      for(let i=0;i<Math.min(frames.length,50);i++){
+        try{
+          const cmds=window.collectCommands ? window.collectCommands(mainTL, window.buildSymbolMap(animData), window.buildAtlasMap(atlasData), frames[i]) : [];
+          if(!cmds.length) continue;
+          const box=window.bbox ? window.bbox(cmds) : {minX:0,minY:0,maxX:100,maxY:100};
+          const c=document.createElement('canvas');
+          c.width=box.maxX-box.minX;
+          c.height=box.maxY-box.minY;
+          const ctx=c.getContext('2d');
           cmds.forEach(cmd=>{
-            const c = document.createElement('canvas');
-            c.width = cmd.rect.w;
-            c.height = cmd.rect.h;
-            const ctx = c.getContext('2d');
-            ctx.drawImage(atlasImage, cmd.rect.x,cmd.rect.y,cmd.rect.w,cmd.rect.h,0,0,cmd.rect.w,cmd.rect.h);
-            canvases.push(c);
+            const r=cmd.rect;
+            const m=cmd.transform;
+            ctx.setTransform(m.a,m.b,m.c,m.d,m.tx-box.minX,m.ty-box.minY);
+            ctx.drawImage(atlasImage,r.x,r.y,r.w,r.h,0,0,r.w,r.h);
           });
-        }
-        for(let j=0;j<canvases.length;j++){
-          const blob = await new Promise(r=>canvases[j].toBlob(r,'image/png'));
-          folder.file(`frame_${String(idx).padStart(4,'0')}_${j}.png`,blob);
-        }
-      } catch(e){
-        console.error(e);
-        setStatus?.(`Error frame ${idx}: ${e.message}`);
+          animFrames.push(c);
+        }catch(e){ console.warn('Frame preview skipped',e); }
       }
-      await new Promise(r=>setTimeout(r,0));
-    }
 
-    const zipBlob = await zip.generateAsync({type:'blob'}, m=>setStatus?.(`Comprimiendo... ${Math.round(m.percent)}%`));
-    return zipBlob;
+      animFrameIndex=0;
+      previewAnim.style.display='block';
+      if(animTimer) clearInterval(animTimer);
+      animTimer=setInterval(()=>{
+        if(!animFrames.length) return;
+        const ctx=previewAnim.getContext('2d');
+        const frame=animFrames[animFrameIndex];
+        previewAnim.width=frame.width;
+        previewAnim.height=frame.height;
+        ctx.clearRect(0,0,frame.width,frame.height);
+        ctx.drawImage(frame,0,0);
+        animFrameIndex=(animFrameIndex+1)%animFrames.length;
+      },100);
+      setStatus('Previsualización lista');
+    }catch(err){
+      console.error(err);
+      setStatus('Error previsualización: '+err.message);
+    }
   }
 
-  window.exportFramesFromAnimationToZip = exportFramesFromAnimationToZip;
-  window.buildAtlasMap = buildAtlasMap;
-  window.buildSymbolMap = buildSymbolMap;
-  window.collectFrameIndices = collectFrameIndices;
-  window.collectCommands = collectCommands;
+  // --- Exportar ---
+  btn.addEventListener('click',async()=>{
+    try{
+      if(!window.JSZip) throw new Error('JSZip no cargado');
+      if(!atlasImage || !atlasData) throw new Error('Faltan archivos de atlas');
+
+      setStatus('Procesando...');
+      const zipBlob=animData
+        ? await window.exportFramesFromAnimationToZip(atlasImage,atlasData,animData,setStatus)
+        : await window.exportAtlasPieces(atlasImage,atlasData,setStatus);
+
+      if(lastZipUrl) URL.revokeObjectURL(lastZipUrl);
+      lastZipUrl=URL.createObjectURL(zipBlob);
+
+      const a=document.createElement('a');
+      a.href=lastZipUrl;
+      a.download=animData?'frames_construidos.zip':'sprites_piezas.zip';
+      a.click();
+
+      openZip.style.display='inline-block';
+      openZip.onclick=()=>window.open(lastZipUrl,'_blank');
+
+      setStatus('ZIP listo.');
+    }catch(err){
+      console.error(err);
+      setStatus('Error: '+err.message);
+    }
+  });
 
 })();
