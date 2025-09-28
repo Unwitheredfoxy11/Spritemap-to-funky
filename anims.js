@@ -5,7 +5,8 @@
 // Intenta armar, y si los pngs fallan, tira error
 // Intento de que cambie la ruta de construccion
 // --- Construye animaciones a partir de atlas.js y anim.json ---
-
+// anims.fixed.js, me gaste otra cuenta para esto... casi se muere chat we
+// Reconstruye frames desde anim.json y atlas, con tolerancia a errores
 (function () {
   // --- utilidades ---
   function m3dToAffine(m3d) {
@@ -31,28 +32,65 @@
     return { x: m.a * x + m.c * y + m.tx, y: m.b * x + m.d * y + m.ty };
   }
 
-  // --- mapas de atlas ---
+  // Normaliza nombres de sprite/keys: saca rutas, normaliza .png y dobles .png
+  function normalizeKey(name) {
+    if (!name) return name;
+    // quitar ruta
+    const base = name.replace(/^.*[\\/]/, '');
+    // eliminar espacios iniciales/finales
+    let n = base.trim();
+    // eliminar duplicados de .png (ej: "idle0000.png.png")
+    while (n.toLowerCase().endsWith('.png.png')) n = n.slice(0, -4);
+    // eliminar una sola extensión .png para guardar key sin extension
+    if (n.toLowerCase().endsWith('.png')) n = n.slice(0, -4);
+    // si termina con un punto por accidente
+    if (n.endsWith('.')) n = n.slice(0, -1);
+    return n;
+  }
+
+  // --- mapas de atlas (tolerante) ---
   function buildAtlasMap(data) {
     const map = {};
-    (data?.ATLAS?.SPRITES || []).forEach(it => {
-      const s = it.SPRITE;
+    if (!data) return map;
+
+    // Intentar varias estructuras comunes
+    const spritesArr = data?.ATLAS?.SPRITES || data?.ATLAS?.SPRITE || data?.SPRITES || data?.TEXTURES || [];
+
+    // Si sprite es objeto único convertir a array
+    const list = Array.isArray(spritesArr) ? spritesArr : [spritesArr];
+
+    list.forEach(it => {
+      const s = it.SPRITE || it; // en algunos exports el objeto ya viene directo
+      if (!s || !s.name) return;
+      const keyNorm = normalizeKey(s.name);
       map[s.name] = { x: s.x, y: s.y, w: s.w, h: s.h };
+      if (keyNorm !== s.name) map[keyNorm] = map[s.name];
+      // también guardar sin .png y sin extension
+      const noExt = s.name.replace(/\.png$/i, '');
+      if (noExt !== s.name) map[noExt] = map[s.name];
     });
+
     return map;
   }
 
   function buildSymbolMap(data) {
     const map = {};
-    (data?.SD?.S || []).forEach(sym => map[sym.SN] = sym);
+    const arr = data?.SD?.S || data?.S || [];
+    const list = Array.isArray(arr) ? arr : [arr];
+    list.forEach(sym => {
+      if (!sym) return;
+      if (sym.SN) map[sym.SN] = sym;
+      else if (sym.name) map[sym.name] = sym;
+    });
     return map;
   }
 
   function collectFrameIndices(tl) {
     const set = new Set();
-    (tl.L || []).forEach(layer =>
+    (tl?.L || []).forEach(layer =>
       (layer.FR || []).forEach(fr => {
         const start = fr.I || 0;
-        const dur = fr.DU || 1;
+        const dur = Math.max(1, fr.DU || 1);
         for (let k = start; k < start + dur; k++) set.add(k);
       })
     );
@@ -66,6 +104,10 @@
     function findAtlasKey(ref) {
       if (!ref) return null;
       if (atlas[ref]) return ref;
+      const norm = normalizeKey(ref);
+      if (atlas[norm]) return norm;
+      const noExt = ref.replace(/\.png$/i, '');
+      if (atlas[noExt]) return noExt;
       return null;
     }
 
@@ -117,6 +159,7 @@
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     commands.forEach(cmd => {
       const r = cmd.rect;
+      if (!r) return;
       [
         transformPoint(cmd.transform, 0, 0),
         transformPoint(cmd.transform, r.w, 0),
@@ -129,6 +172,8 @@
         maxY = Math.max(maxY, p.y);
       });
     });
+    // si no se modificó, devolver caja por defecto
+    if (!isFinite(minX)) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     return { minX: Math.floor(minX), minY: Math.floor(minY), maxX: Math.ceil(maxX), maxY: Math.ceil(maxY) };
   }
 
@@ -143,10 +188,16 @@
       if (!cmd.rect) return;
       const r = cmd.rect, m = cmd.transform;
       ctx.save();
+      // setTransform(a, b, c, d, tx, ty)
       ctx.setTransform(m.a, m.b, m.c, m.d, m.tx - box.minX, m.ty - box.minY);
-      ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+      try {
+        // img puede ser Image, Canvas o ImageBitmap
+        ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+        drew = true;
+      } catch (e) {
+        console.warn("drawImage falló para rect:", r, e);
+      }
       ctx.restore();
-      drew = true;
     });
 
     if (!drew) console.warn("⚠️ Frame vacío");
@@ -154,54 +205,91 @@
   }
 
   function frameName(commands, idx) {
-    const names = [...new Set(commands.map(c => c.sourceName))];
-    return (names[0] || 'frame') + "_" + String(idx).padStart(4, "0");
+    const names = [...new Set(commands.map(c => c.sourceName).filter(Boolean))];
+    const base = (names[0] || 'frame');
+    const cleanBase = normalizeKey(base);
+    return cleanBase + "_" + String(idx).padStart(4, "0");
   }
 
   // --- exportación ---
   async function exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus) {
-    const atlas = buildAtlasMap(atlasData);
-    const symbols = buildSymbolMap(animData);
-    const mainTL = animData?.AN?.TL || animData?.TL;
-    if (!mainTL?.L) throw new Error('❌ Timeline principal no encontrada');
+    try {
+      const atlas = buildAtlasMap(atlasData);
+      const symbols = buildSymbolMap(animData);
+      const mainTL = animData?.AN?.TL || animData?.TL || animData?.AN || animData;
+      if (!mainTL?.L) throw new Error('❌ Timeline principal no encontrada');
 
-    const frames = collectFrameIndices(mainTL);
-    const zip = new JSZip();
-    const folder = zip.folder('frames');
+      const frames = collectFrameIndices(mainTL);
+      if (!frames.length) throw new Error('❌ No se encontraron frames en la timeline');
 
-    for (let i = 0; i < frames.length; i++) {
-      const idx = frames[i];
-      setStatus?.(`Procesando frame ${i + 1}/${frames.length}`);
+      if (typeof JSZip === 'undefined') throw new Error('❌ JSZip no está disponible en el entorno (incluye la librería JSZip).');
 
-      const cmds = collectCommands(mainTL, symbols, atlas, idx);
+      const zip = new JSZip();
+      const folder = zip.folder('frames');
 
-      if (!cmds.length) {
-        console.warn(`⚠️ Frame ${idx} vacío`);
-        continue;
+      for (let i = 0; i < frames.length; i++) {
+        const idx = frames[i];
+        setStatus?.(`Procesando frame ${i + 1}/${frames.length}`);
+
+        const cmds = collectCommands(mainTL, symbols, atlas, idx);
+
+        if (!cmds.length) {
+          console.warn(`⚠️ Frame ${idx} vacío`);
+          continue;
+        }
+
+        const box = bbox(cmds);
+        const canvas = draw(cmds, box, atlasImage);
+
+        // --- check transparencia (corregido) ---
+        const ctx = canvas.getContext('2d');
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let hasOpaque = false;
+        for (let p = 3; p < imgData.length; p += 4) {
+          if (imgData[p] > 0) { hasOpaque = true; break; }
+        }
+        if (!hasOpaque) {
+          console.warn(`⚠️ Frame ${idx} totalmente transparente, intentando reconstruir...`);
+          // Aquí podrías intentar heurísticas: por ejemplo, ignorar transform o usar composiciones alternativas.
+        }
+
+        const blob = await new Promise(res => {
+          try {
+            canvas.toBlob(b => res(b), 'image/png');
+            // notamos que toBlob es asíncrono y puede devolver null en algunos entornos; el fallback sería toDataURL
+          } catch (e) {
+            console.warn("toBlob falló, usando fallback toDataURL", e);
+            const dataURL = canvas.toDataURL('image/png');
+            // convertir dataURL -> blob
+            const byteString = atob(dataURL.split(',')[1]);
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+            const newBlob = new Blob([ab], { type: 'image/png' });
+            res(newBlob);
+          }
+        });
+
+        if (!blob) {
+          console.warn(`⚠️ No se pudo generar PNG para frame ${idx}, se omite.`);
+          continue;
+        }
+
+        folder.file(frameName(cmds, idx) + ".png", blob);
+
+        // alivianar la event loop
+        await new Promise(r => setTimeout(r, 0));
       }
 
-      const box = bbox(cmds);
-      const canvas = draw(cmds, box, atlasImage);
-
-      // --- check transparencia ---
-      const ctx = canvas.getContext('2d');
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const allTransparent = !data.some((v, i) => (i % 4) !== 3 && data[i + 3] > 0);
-      if (allTransparent) {
-        console.warn(`⚠️ Frame ${idx} totalmente transparente, intentando reconstruir...`);
-        // Aquí se podrían aplicar heurísticas para intentar reconstruir
-      }
-
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-      folder.file(frameName(cmds, idx) + ".png", blob);
-
-      await new Promise(r => setTimeout(r, 0));
+      const zipBlob = await zip.generateAsync({ type: 'blob' }, m =>
+        setStatus?.(`Comprimiendo... ${Math.round(m.percent)}%`)
+      );
+      setStatus?.('Listo');
+      return zipBlob;
+    } catch (err) {
+      console.error("exportFramesFromAnimationToZip: ", err);
+      throw err;
     }
-
-    const zipBlob = await zip.generateAsync({ type: 'blob' }, m =>
-      setStatus?.(`Comprimiendo... ${Math.round(m.percent)}%`)
-    );
-    return zipBlob;
   }
 
   window.exportFramesFromAnimationToZip = exportFramesFromAnimationToZip;
