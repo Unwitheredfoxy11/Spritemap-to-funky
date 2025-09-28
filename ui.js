@@ -111,12 +111,3 @@
   });
 
 })();
-
-
-// ==================== anims.fixed.js ====================
-(function () {
-  // todo el bloque que te pasé de anims.fixed.js aquí
-  // ...
-  // al final:
-  window.exportFramesFromAnimationToZip = exportFramesFromAnimationToZip;
-})();
