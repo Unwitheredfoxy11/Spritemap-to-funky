@@ -1,6 +1,7 @@
 // anim_hibrido.js
 // Reconstruye frames desde anim.json y atlas, con tolerancia a errores
 // me estoy cansando sin hacer mucho
+// eArreglo de imagenes alpha
 
 (function () {
   // --- utilidades ---
@@ -193,6 +194,17 @@
     });
 
     if (!drew) throw new Error("❌ Imagen not found (nada dibujado)");
+
+    // --- comprobación de transparencia completa ---
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let allTransparent = true;
+    for (let i = 3; i < data.length; i += 4) { // canal alfa
+      if (data[i] !== 0) {
+        allTransparent = false;
+        break;
+      }
+    }
+    if (allTransparent) throw new Error("❌ Imagen totalmente transparente");
 
     return c;
   }
