@@ -1,5 +1,6 @@
 // anim_hibrido.js
 // Reconstruye frames desde anim.json y atlas, con tolerancia a errores
+// me estoy cansando sin hacer mucho
 
 (function () {
   // --- utilidades ---
@@ -84,7 +85,7 @@
   }
 
   // --- recolector de comandos con fallback ---
-  function collectCommands(mainTL, symbols, atlas, idx, pieceKeys) {
+  function collectCommands(mainTL, symbols, atlas, idx) {
     const out = [];
 
     function findAtlasKey(ref) {
@@ -114,7 +115,7 @@
         (fr.E || []).forEach(el => {
           if (el.ASI) {
             const rectKey = findAtlasKey(el.ASI.N);
-            if (!rectKey) return;
+            if (!rectKey) throw new Error(`❌ Imagen not found: ${el.ASI.N}`);
             const rect = atlas[rectKey];
             const m = m3dToAffine(el.ASI.M3D || []);
             out.push({ rect, transform: mulAffine(tf, m), sourceName: rectKey });
@@ -134,7 +135,7 @@
       (fr.E || []).forEach(el => {
         if (el.ASI) {
           const rectKey = findAtlasKey(el.ASI.N);
-          if (!rectKey) return;
+          if (!rectKey) throw new Error(`❌ Imagen not found: ${el.ASI.N}`);
           out.push({ rect: atlas[rectKey], transform: m3dToAffine(el.ASI.M3D || []), sourceName: rectKey });
         } else if (el.SI) {
           recurse(el.SI.SN, idx - (fr.I || 0), m3dToAffine(el.SI.M3D || []));
@@ -168,17 +169,31 @@
   }
 
   function draw(commands, box, img) {
+    const width = Math.max(1, box.maxX - box.minX);
+    const height = Math.max(1, box.maxY - box.minY);
+
+    if (width <= 1 && height <= 1) {
+      throw new Error("❌ Imagen not found (bounding box vacío)");
+    }
+
     const c = document.createElement('canvas');
-    c.width = Math.max(1, box.maxX - box.minX);
-    c.height = Math.max(1, box.maxY - box.minY);
+    c.width = width;
+    c.height = height;
     const ctx = c.getContext('2d');
+
+    let drew = false;
     commands.forEach(cmd => {
+      if (!cmd.rect) throw new Error(`❌ Imagen not found: ${cmd.sourceName}`);
       const r = cmd.rect, m = cmd.transform;
       ctx.save();
       ctx.setTransform(m.a, m.b, m.c, m.d, m.tx - box.minX, m.ty - box.minY);
       ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
       ctx.restore();
+      drew = true;
     });
+
+    if (!drew) throw new Error("❌ Imagen not found (nada dibujado)");
+
     return c;
   }
 
@@ -201,18 +216,18 @@
     for (let i = 0; i < frames.length; i++) {
       const idx = frames[i];
       setStatus?.(`Procesando frame ${i + 1}/${frames.length}`);
-      const cmds = collectCommands(mainTL, symbols, atlas, idx);
-      if (!cmds.length) {
-        // Frame vacío → placeholder
-        const tiny = document.createElement('canvas'); tiny.width = 1; tiny.height = 1;
-        const blob = await new Promise(res => tiny.toBlob(res, 'image/png'));
-        folder.file(`empty_${String(idx).padStart(4, '0')}.png`, blob);
-        continue;
+      try {
+        const cmds = collectCommands(mainTL, symbols, atlas, idx);
+        if (!cmds.length) throw new Error(`❌ Frame ${idx} vacío`);
+        const box = bbox(cmds);
+        const canvas = draw(cmds, box, atlasImage);
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        folder.file(frameName(cmds, idx) + ".png", blob);
+      } catch (err) {
+        setStatus?.(err.message);
+        console.error(err);
+        throw err; // 🚨 aborta todo
       }
-      const box = bbox(cmds);
-      const canvas = draw(cmds, box, atlasImage);
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-      folder.file(frameName(cmds, idx) + ".png", blob);
       await new Promise(r => setTimeout(r, 0));
     }
 
