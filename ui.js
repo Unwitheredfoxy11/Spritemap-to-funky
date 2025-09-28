@@ -1,50 +1,84 @@
 // ui.js
-// --- Conecta los inputs de la página con atlas.js y anim.js ---
+// --- Conecta inputs + drop-box con atlas.js y anim.js ---
 
 (function () {
   let atlasImage = null, atlasData = null, animData = null, lastZipUrl = null;
 
-  const pngInput = document.getElementById('pngInput');
+  // Elementos de la UI
+  const pngInput  = document.getElementById('pngInput');
   const jsonInput = document.getElementById('jsonInput');
   const animInput = document.getElementById('animInput');
   const statusEl  = document.getElementById('status');
   const btn       = document.getElementById('convertir');
   const openZip   = document.getElementById('openZipTab');
 
-  const setStatus = m => { statusEl.textContent = m; console.log(m); };
+  // Crear drop-box
+  const dropBox = document.createElement('div');
+  dropBox.className = 'drop-box';
+  dropBox.textContent = 'Arrastrá y soltá tus archivos aquí (PNG, JSON, Animation.json)';
+  document.querySelector('.inputs').prepend(dropBox);
+
+  // Helpers
+  const setStatus = msg => { statusEl.textContent = msg; console.log(msg); };
   const fileToText = f => new Promise((res, rej) => {
-    const r = new FileReader(); r.onload = () => res(r.result);
-    r.onerror = () => rej(r.error); r.readAsText(f);
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsText(f);
   });
   const fileToDataURL = f => new Promise((res, rej) => {
-    const r = new FileReader(); r.onload = () => res(r.result);
-    r.onerror = () => rej(r.error); r.readAsDataURL(f);
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = () => rej(r.error);
+    r.readAsDataURL(f);
   });
 
-  pngInput.addEventListener('change', async e => {
-    const f = e.target.files[0]; if (!f) return;
-    const img = new Image();
-    img.onload = () => { atlasImage = img; setStatus('PNG cargado'); };
-    img.src = await fileToDataURL(f);
-  });
-  jsonInput.addEventListener('change', async e => {
-    const f = e.target.files[0]; if (!f) return;
-    atlasData = JSON.parse(await fileToText(f));
-    setStatus('JSON del atlas cargado');
-  });
-  animInput.addEventListener('change', async e => {
-    const f = e.target.files[0];
-    if (!f) { animData = null; setStatus('Sin Animation.json (modo piezas)'); return; }
-    animData = JSON.parse(await fileToText(f));
-    setStatus('Animation.json cargado');
+  // Carga de archivos
+  async function handleFile(f) {
+    const name = f.name.toLowerCase();
+    if (name.endsWith('.png')) {
+      const img = new Image();
+      img.onload = () => { atlasImage = img; setStatus('PNG cargado'); };
+      img.src = await fileToDataURL(f);
+    } else if (name.endsWith('.json')) {
+      const text = await fileToText(f);
+      const data = JSON.parse(text);
+      if (data?.ATLAS) { atlasData = data; setStatus('JSON del atlas cargado'); }
+      else if (data?.AN || data?.TL) { animData = data; setStatus('Animation.json cargado'); }
+      else setStatus('JSON desconocido, no se cargó');
+    } else {
+      setStatus('Archivo no soportado: ' + f.name);
+    }
+  }
+
+  // Input change
+  [pngInput, jsonInput, animInput].forEach(input =>
+    input.addEventListener('change', async e => {
+      const f = e.target.files[0]; if (!f) return;
+      await handleFile(f);
+    })
+  );
+
+  // Drag & drop
+  ['dragenter','dragover'].forEach(ev =>
+    dropBox.addEventListener(ev, e => { e.preventDefault(); dropBox.classList.add('dragover'); })
+  );
+  ['dragleave','drop'].forEach(ev =>
+    dropBox.addEventListener(ev, e => { e.preventDefault(); dropBox.classList.remove('dragover'); })
+  );
+  dropBox.addEventListener('drop', async e => {
+    const files = Array.from(e.dataTransfer.files);
+    for (const f of files) await handleFile(f);
   });
 
+  // Botón exportar
   btn.addEventListener('click', async () => {
     try {
       if (!window.JSZip) throw new Error('JSZip no cargado');
       if (!atlasImage || !atlasData) throw new Error('Faltan archivos de atlas');
 
       setStatus('Procesando...');
+
       const zipBlob = animData
         ? await window.exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus)
         : await window.exportAtlasPieces(atlasImage, atlasData, setStatus);
