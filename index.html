@@ -9,7 +9,9 @@
 <body>
   <h1>Conversor Spritemap → PNGs (ZIP)</h1>
 
-  <div class="inputs">
+  <div id="dropBox" class="inputs">
+    <p class="dropText">Arrastra tus archivos aquí o usa los botones para importar</p>
+
     <label>PNG de Adobe Animate:
       <input id="pngInput" type="file" accept="image/png">
     </label>
@@ -30,10 +32,10 @@
 
   <p id="status">Esperando archivos...</p>
 
-  <!-- Librería JSZip primero -->
+  <!-- Librería JSZip -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- Luego los módulos, en este orden -->
+  <!-- Módulos de mierda-->
   <script src="atlas.js"></script>
   <script src="anims.js"></script>
   <script src="ui.js"></script>
