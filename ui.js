@@ -3,23 +3,28 @@
   let atlasImage = null, atlasData = null, animData = null, lastZipUrl = null;
   let animFrames = [], animFrameIndex = 0, animTimer = null;
 
+  // Inputs
   const pngInput  = document.getElementById('pngInput');
   const jsonInput = document.getElementById('jsonInput');
   const animInput = document.getElementById('animInput');
 
+  // Drop boxes
   const dropBoxPng   = document.getElementById('dropBoxPng');
   const dropBoxAtlas = document.getElementById('dropBoxAtlas');
   const dropBoxAnim  = document.getElementById('dropBoxAnim');
 
+  // Estado y botones
   const statusEl  = document.getElementById('status');
   const btn       = document.getElementById('convertir');
   const openZip   = document.getElementById('openZipTab');
 
+  // Previews
   const previewPNG  = document.getElementById('previewPNG');
   const previewAnim = document.getElementById('previewAnim');
 
   const setStatus = m => { statusEl.textContent = m; console.log(m); };
 
+  // --- Utilidades para leer archivos ---
   const fileToText = f => new Promise((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result);
@@ -39,6 +44,7 @@
     input.files = dt.files;
   }
 
+  // --- Drag & Drop genérico ---
   function setupDropBox(dropBox, input, onLoadFile) {
     dropBox.addEventListener('dragover', e => {
       e.preventDefault();
@@ -57,7 +63,8 @@
     });
 
     input.addEventListener('change', async e => {
-      const f = e.target.files[0]; if (!f) return;
+      const f = e.target.files[0]; 
+      if (!f) return;
       await onLoadFile(f);
     });
   }
@@ -68,13 +75,13 @@
     img.onload = () => {
       atlasImage = img;
       setStatus('PNG cargado');
-      // preview PNG
+      // Preview
       previewPNG.width = img.width / 2;
       previewPNG.height = img.height / 2;
       previewPNG.style.display = 'block';
       const ctx = previewPNG.getContext('2d');
-      ctx.clearRect(0,0,previewPNG.width, previewPNG.height);
-      ctx.drawImage(img, 0,0, previewPNG.width, previewPNG.height);
+      ctx.clearRect(0,0,previewPNG.width,previewPNG.height);
+      ctx.drawImage(img,0,0,previewPNG.width,previewPNG.height);
     };
     img.src = await fileToDataURL(file);
   });
@@ -92,7 +99,7 @@
     buildAnimPreview();
   });
 
-  // --- Construir previsualización ---
+  // --- Previsualización animación ---
   async function buildAnimPreview() {
     if (!atlasImage || !animData) return;
     setStatus('Generando previsualización...');
@@ -101,7 +108,7 @@
       const mainTL = animData?.AN?.TL || animData?.TL;
       const frames = window.collectFrameIndices
         ? window.collectFrameIndices(mainTL)
-        : [...Array(10).keys()]; // fallback
+        : [...Array(10).keys()];
 
       for (let i = 0; i < Math.min(frames.length, 50); i++) {
         try {
@@ -109,21 +116,24 @@
             ? window.collectCommands(mainTL, window.buildSymbolMap(animData), window.buildAtlasMap(atlasData), frames[i])
             : [];
           if (!cmds.length) continue;
+
           const box = window.bbox ? window.bbox(cmds) : {minX:0,minY:0,maxX:100,maxY:100};
           const c = document.createElement('canvas');
           c.width = box.maxX - box.minX;
           c.height = box.maxY - box.minY;
           const ctx = c.getContext('2d');
+
           cmds.forEach(cmd => {
             const r = cmd.rect, m = cmd.transform;
             ctx.setTransform(m.a,m.b,m.c,m.d,m.tx-box.minX,m.ty-box.minY);
-            ctx.drawImage(atlasImage, r.x,r.y,r.w,r.h,0,0,r.w,r.h);
+            ctx.drawImage(atlasImage,r.x,r.y,r.w,r.h,0,0,r.w,r.h);
           });
+
           animFrames.push(c);
         } catch(e){ console.warn('Frame preview skipped', e); }
       }
 
-      // Animación loop
+      // Loop animación
       animFrameIndex = 0;
       previewAnim.style.display = 'block';
       if (animTimer) clearInterval(animTimer);
@@ -133,14 +143,14 @@
         const frame = animFrames[animFrameIndex];
         previewAnim.width = frame.width;
         previewAnim.height = frame.height;
-        ctx.clearRect(0,0,frame.width, frame.height);
+        ctx.clearRect(0,0,frame.width,frame.height);
         ctx.drawImage(frame,0,0);
         animFrameIndex = (animFrameIndex + 1) % animFrames.length;
       }, 100);
       setStatus('Previsualización lista');
     } catch(err) {
       console.error(err);
-      setStatus('Error previsualización: ' + err.message);
+      setStatus('Error previsualización: '+err.message);
     }
   }
 
