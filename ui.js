@@ -97,17 +97,23 @@
     if (!atlasImage || !animData || !atlasData) return;
     setStatus('Generando primer frame...');
     try {
-      const zipCanvas = await window.exportFramesFromAnimationToZip(atlasImage, atlasData, animData, null, {previewOnly: true});
+      const zipCanvas = await window.exportFramesFromAnimationToZip(
+        atlasImage, atlasData, animData, null, {previewOnly: true}
+      );
+      if (!zipCanvas) {
+        setStatus('No se pudo generar preview');
+        return;
+      }
       previewAnim.width = zipCanvas.width;
       previewAnim.height = zipCanvas.height;
       previewAnim.style.display = 'block';
       const ctx = previewAnim.getContext('2d');
-      ctx.clearRect(0,0,zipCanvas.width,zipCanvas.height);
+      ctx.clearRect(0,0,previewAnim.width, previewAnim.height);
       ctx.drawImage(zipCanvas,0,0);
       setStatus('Primer frame listo');
     } catch(err) {
       console.error(err);
-      setStatus('Error preview: ' + err.message);
+      setStatus('Error preview: ' + (err.message || err));
     }
   }
 
@@ -136,7 +142,7 @@
       setStatus('ZIP listo.');
     } catch (err) {
       console.error(err);
-      setStatus('Error: ' + err.message);
+      setStatus('Error: ' + (err.message || err));
     }
   });
 
