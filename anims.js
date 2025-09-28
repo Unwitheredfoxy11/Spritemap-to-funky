@@ -2,6 +2,7 @@
 // Reconstruye frames desde anim.json y atlas, con tolerancia a errores
 // me estoy cansando sin hacer mucho
 // eArreglo de imagenes alpha
+// Intenta armar, y si los pngs fallan, tira error
 
 (function () {
   // --- utilidades ---
@@ -116,7 +117,10 @@
         (fr.E || []).forEach(el => {
           if (el.ASI) {
             const rectKey = findAtlasKey(el.ASI.N);
-            if (!rectKey) throw new Error(`❌ Imagen not found: ${el.ASI.N}`);
+            if (!rectKey) {
+              console.warn(`⚠️ Imagen no encontrada: ${el.ASI.N}`);
+              return;
+            }
             const rect = atlas[rectKey];
             const m = m3dToAffine(el.ASI.M3D || []);
             out.push({ rect, transform: mulAffine(tf, m), sourceName: rectKey });
@@ -136,7 +140,10 @@
       (fr.E || []).forEach(el => {
         if (el.ASI) {
           const rectKey = findAtlasKey(el.ASI.N);
-          if (!rectKey) throw new Error(`❌ Imagen not found: ${el.ASI.N}`);
+          if (!rectKey) {
+            console.warn(`⚠️ Imagen no encontrada: ${el.ASI.N}`);
+            return;
+          }
           out.push({ rect: atlas[rectKey], transform: m3dToAffine(el.ASI.M3D || []), sourceName: rectKey });
         } else if (el.SI) {
           recurse(el.SI.SN, idx - (fr.I || 0), m3dToAffine(el.SI.M3D || []));
@@ -147,7 +154,7 @@
     return out;
   }
 
-  // --- bounding box y dibujo ---
+  // --- bounding box y dibujo con reconstrucción ---
   function bbox(commands) {
     if (!commands.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -172,41 +179,38 @@
   function draw(commands, box, img) {
     const width = Math.max(1, box.maxX - box.minX);
     const height = Math.max(1, box.maxY - box.minY);
-
-    if (width <= 1 && height <= 1) {
-      throw new Error("❌ Imagen not found (bounding box vacío)");
-    }
-
     const c = document.createElement('canvas');
     c.width = width;
     c.height = height;
     const ctx = c.getContext('2d');
 
-    let drew = false;
+    let drewAnything = false;
+
     commands.forEach(cmd => {
-      if (!cmd.rect) throw new Error(`❌ Imagen not found: ${cmd.sourceName}`);
+      if (!cmd.rect) return; // saltar pieza faltante
       const r = cmd.rect, m = cmd.transform;
-      ctx.save();
-      ctx.setTransform(m.a, m.b, m.c, m.d, m.tx - box.minX, m.ty - box.minY);
-      ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-      ctx.restore();
-      drew = true;
+
+      // canvas temporal para chequear transparencia
+      const temp = document.createElement('canvas');
+      temp.width = r.w;
+      temp.height = r.h;
+      const tctx = temp.getContext('2d');
+      tctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+      const imgData = tctx.getImageData(0,0,r.w,r.h).data;
+      const allTransparent = Array.from(imgData).every((v,i) => (i+1)%4===0 ? v===0 : true);
+
+      if (!allTransparent) {
+        ctx.save();
+        ctx.setTransform(m.a, m.b, m.c, m.d, m.tx - box.minX, m.ty - box.minY);
+        ctx.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+        ctx.restore();
+        drewAnything = true;
+      } else {
+        console.warn(`⚠️ Pieza transparente ignorada: ${cmd.sourceName}`);
+      }
     });
 
-    if (!drew) throw new Error("❌ Imagen not found (nada dibujado)");
-
-    // --- comprobación de transparencia completa ---
-    const data = ctx.getImageData(0, 0, width, height).data;
-    let allTransparent = true;
-    for (let i = 3; i < data.length; i += 4) { // canal alfa
-      if (data[i] !== 0) {
-        allTransparent = false;
-        break;
-      }
-    }
-    if (allTransparent) throw new Error("❌ Imagen totalmente transparente");
-
-    return c;
+    return drewAnything ? c : null; // null si nada se pudo dibujar
   }
 
   function frameName(commands, idx) {
@@ -228,18 +232,19 @@
     for (let i = 0; i < frames.length; i++) {
       const idx = frames[i];
       setStatus?.(`Procesando frame ${i + 1}/${frames.length}`);
-      try {
-        const cmds = collectCommands(mainTL, symbols, atlas, idx);
-        if (!cmds.length) throw new Error(`❌ Frame ${idx} vacío`);
-        const box = bbox(cmds);
-        const canvas = draw(cmds, box, atlasImage);
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-        folder.file(frameName(cmds, idx) + ".png", blob);
-      } catch (err) {
-        setStatus?.(err.message);
-        console.error(err);
-        throw err; // 🚨 aborta todo
+      const cmds = collectCommands(mainTL, symbols, atlas, idx);
+      if (!cmds.length) {
+        console.warn(`⚠️ Frame ${idx} vacío`);
+        continue;
       }
+      const box = bbox(cmds);
+      const canvas = draw(cmds, box, atlasImage);
+      if (!canvas) {
+        console.warn(`⚠️ Frame ${idx} no se pudo reconstruir, todas las piezas vacías o transparentes`);
+        continue;
+      }
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      folder.file(frameName(cmds, idx) + ".png", blob);
       await new Promise(r => setTimeout(r, 0));
     }
 
