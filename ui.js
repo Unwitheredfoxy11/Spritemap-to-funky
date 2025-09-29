@@ -69,51 +69,65 @@
       setStatus('PNG cargado');
 
       // preview PNG
-      previewPNG.width = img.width / 2;
-      previewPNG.height = img.height / 2;
+      previewPNG.width = Math.min(1024, img.width) / 2;
+      previewPNG.height = (previewPNG.width / img.width) * img.height;
       previewPNG.style.display = 'block';
       const ctx = previewPNG.getContext('2d');
       ctx.clearRect(0,0,previewPNG.width, previewPNG.height);
       ctx.drawImage(img, 0,0, previewPNG.width, previewPNG.height);
     };
+    img.onerror = (e) => setStatus('Error cargando PNG: ' + e);
     img.src = await fileToDataURL(file);
   });
 
   // --- Cargar Atlas JSON ---
   setupDropBox(dropBoxAtlas, jsonInput, async (file) => {
-    atlasData = JSON.parse(await fileToText(file));
-    setStatus('Atlas JSON cargado');
+    try {
+      atlasData = JSON.parse(await fileToText(file));
+      setStatus('Atlas JSON cargado');
+    } catch (e) {
+      setStatus('JSON atlas inválido: ' + e.message);
+    }
   });
 
   // --- Cargar Anim JSON ---
   setupDropBox(dropBoxAnim, animInput, async (file) => {
-    animData = JSON.parse(await fileToText(file));
-    setStatus('Animation.json cargado');
-    previewFirstFrame();
+    try {
+      animData = JSON.parse(await fileToText(file));
+      setStatus('Animation.json cargado');
+      previewFirstFrame();
+    } catch (e) {
+      setStatus('Animation.json inválido: ' + e.message);
+    }
   });
 
   // --- Mostrar solo el primer frame de la animación ---
   async function previewFirstFrame() {
-    if (!atlasImage || !animData || !atlasData) return;
+    if (!atlasImage || !animData || !atlasData) {
+      setStatus('Faltan archivos para preview (PNG + atlas + Animation.json)');
+      return;
+    }
     setStatus('Generando primer frame...');
     try {
-      const zipCanvas = await window.exportFramesFromAnimationToZip(
-        atlasImage, atlasData, animData, null, {previewOnly: true}
+      // Pedimos previewOnly para que el script nos devuelva el primer canvas posible
+      const firstCanvas = await window.exportFramesFromAnimationToZip(
+        atlasImage, atlasData, animData, null, { previewOnly: true }
       );
-      if (!zipCanvas) {
-        setStatus('No se pudo generar preview');
+      if (!firstCanvas) {
+        setStatus('No se pudo generar preview (canvas nulo)');
+        previewAnim.style.display = 'none';
         return;
       }
-      previewAnim.width = zipCanvas.width;
-      previewAnim.height = zipCanvas.height;
+      previewAnim.width = firstCanvas.width;
+      previewAnim.height = firstCanvas.height;
       previewAnim.style.display = 'block';
       const ctx = previewAnim.getContext('2d');
       ctx.clearRect(0,0,previewAnim.width, previewAnim.height);
-      ctx.drawImage(zipCanvas,0,0);
+      ctx.drawImage(firstCanvas,0,0);
       setStatus('Primer frame listo');
     } catch(err) {
       console.error(err);
-      setStatus('Error preview: ' + (err.message || err));
+      setStatus('Error preview: ' + (err && err.message ? err.message : err));
     }
   }
 
@@ -121,7 +135,7 @@
   btn.addEventListener('click', async () => {
     try {
       if (!window.JSZip) throw new Error('JSZip no cargado');
-      if (!atlasImage || !atlasData) throw new Error('Faltan archivos de atlas');
+      if (!atlasImage || !atlasData) throw new Error('Faltan archivos de atlas (PNG + JSON)');
 
       setStatus('Procesando...');
       const zipBlob = animData
@@ -142,7 +156,7 @@
       setStatus('ZIP listo.');
     } catch (err) {
       console.error(err);
-      setStatus('Error: ' + (err.message || err));
+      setStatus('Error: ' + (err && err.message ? err.message : err));
     }
   });
 
