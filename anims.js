@@ -1,24 +1,18 @@
 // anims.js
 // Reconstruye frames desde Animation.json + atlas (spritemap PNG)
-// Exporta:
-//   window.exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus, options)
-//   window.buildAtlasMap, window.buildSymbolMap, window.collectFrameIndices,
-//   window.collectCommands, window.bbox, window.drawFrame
+// Exports: window.exportFramesFromAnimationToZip, window.buildAtlasMap, window.buildSymbolMap,
+//          window.collectFrameIndices, window.collectCommands, window.bbox, window.drawFrame
 
 (function () {
-  // -------------------------
-  // Utilidades de transform
-  // -------------------------
+  // --- utilidades de matrices/transformaciones ---
   function m3dToAffine(m3d) {
-    // M3D viene como array de 16 (col-major / row-major según fuente), aquí usamos
-    // indices comunes que viste en los JSON: [a, b, c, d, e, f, ..., tx, ty,...] con tx index 12, ty index 13.
     return {
-      a: (m3d && m3d[0] != null) ? m3d[0] : 1,
-      b: (m3d && m3d[1] != null) ? m3d[1] : 0,
-      c: (m3d && m3d[4] != null) ? m3d[4] : 0,
-      d: (m3d && m3d[5] != null) ? m3d[5] : 1,
-      tx: (m3d && m3d[12] != null) ? m3d[12] : 0,
-      ty: (m3d && m3d[13] != null) ? m3d[13] : 0
+      a: (m3d && m3d[0] !== undefined) ? m3d[0] : 1,
+      b: (m3d && m3d[1] !== undefined) ? m3d[1] : 0,
+      c: (m3d && m3d[4] !== undefined) ? m3d[4] : 0,
+      d: (m3d && m3d[5] !== undefined) ? m3d[5] : 1,
+      tx: (m3d && m3d[12] !== undefined) ? m3d[12] : 0,
+      ty: (m3d && m3d[13] !== undefined) ? m3d[13] : 0
     };
   }
 
@@ -37,24 +31,23 @@
     return { x: m.a * x + m.c * y + m.tx, y: m.b * x + m.d * y + m.ty };
   }
 
-  // -------------------------
-  // Fuzzy matching para atlas
-  // -------------------------
+  // --- normalización / fuzzy matching ---
   function normalizeForMatch(s) {
     return String(s || '')
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
-      .replace(/\.[a-z0-9]+$/i, '') // quitar extensión
-      .replace(/[_\-\s\/\\]+/g, ' ')
+      .replace(/\.[a-z0-9]+$/i, '') // quitar extensiones
+      .replace(/[_\-\/\\]+/g, ' ')
       .replace(/[^a-z0-9\s]+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
   }
-
   function levenshtein(a, b) {
+    if (a === b) return 0;
     const al = a.length, bl = b.length;
     if (al === 0) return bl;
     if (bl === 0) return al;
-    let v0 = new Array(bl + 1), v1 = new Array(bl + 1);
+    const v0 = new Array(bl + 1), v1 = new Array(bl + 1);
     for (let j = 0; j <= bl; j++) v0[j] = j;
     for (let i = 0; i < al; i++) {
       v1[0] = i + 1;
@@ -73,114 +66,115 @@
     return 1 - (dist / Math.max(a.length, b.length));
   }
 
-  // -------------------------
-  // Mapas (expuestos)
-  // -------------------------
+  // --- construir mapas (atlas, símbolos) ---
   function buildAtlasMap(atlasData) {
     const map = {};
-    const sprites = atlasData?.ATLAS?.SPRITES || [];
-    for (const spr of sprites) {
-      const s = spr.SPRITE;
-      if (!s) continue;
-      map[s.name] = { x: s.x, y: s.y, w: s.w, h: s.h };
-    }
+    if (!atlasData) return map;
+    (atlasData.ATLAS?.SPRITES || []).forEach(it => {
+      const s = it.SPRITE || it;
+      const name = s.name ?? s.N ?? s.n ?? '';
+      map[name] = { x: s.x, y: s.y, w: s.w, h: s.h };
+    });
     return map;
   }
 
   function buildSymbolMap(animData) {
     const map = {};
-    const syms = animData?.SD?.S || [];
-    for (const s of syms) map[s.SN] = s;
+    (animData?.SD?.S || []).forEach(sym => {
+      map[sym.SN] = sym;
+    });
     return map;
   }
 
-  function collectFrameIndices(tl) {
-    // Expande según I y DU (DU = duración)
-    const set = new Set();
-    if (!tl || !tl.L) return [];
-    for (const layer of tl.L) {
-      const frs = layer.FR || [];
-      for (const fr of frs) {
+  // --- calcular cantidad total de frames (expand DU) ---
+  function collectFrameIndices(mainTL) {
+    if (!mainTL?.L) return [];
+    let maxEnd = 0;
+    mainTL.L.forEach(layer => {
+      (layer.FR || []).forEach(fr => {
         const start = fr.I || 0;
-        const dur = Math.max(1, fr.DU || 1);
-        for (let k = start; k < start + dur; k++) set.add(k);
-      }
-    }
-    return [...set].sort((a, b) => a - b);
+        const dur = fr.DU || 1;
+        maxEnd = Math.max(maxEnd, start + dur);
+      });
+    });
+    // devolver 0..maxEnd-1 (inclusivo)
+    return Array.from({ length: Math.max(0, maxEnd) }, (_, i) => i);
   }
 
-  // -------------------------
-  // Recolector de comandos
-  // -------------------------
+  // --- collectCommands: dada una frame index del main TL, retorna piezas con transform global ---
   function collectCommands(mainTL, symbols, atlas, idx) {
     const out = [];
 
+    // helper para encontrar key en atlas con fuzzy
     function findAtlasKey(ref) {
       if (!ref) return null;
       if (atlas[ref]) return ref;
       const normRef = normalizeForMatch(ref);
+      // intento exacto por normalización
+      for (const k in atlas) if (normalizeForMatch(k) === normRef) return k;
+      // fuzzy best
       let best = null, bestScore = 0;
       for (const k in atlas) {
         const score = similarityScore(normRef, normalizeForMatch(k));
         if (score > bestScore) { bestScore = score; best = k; }
       }
-      if (bestScore > 0.30) { // umbral conservador
-        console.warn(`Fuzzy atlas match: "${ref}" → "${best}" (score ${bestScore.toFixed(2)})`);
+      if (bestScore > 0.6) {
+        console.warn(`Fuzzy atlas match: "${ref}" -> "${best}" (score ${bestScore.toFixed(2)})`);
         return best;
       }
       return null;
     }
 
-    function recurse(symName, localFrame, tf) {
-      const sym = symbols[symName];
-      if (!sym || !sym.TL || !sym.TL.L) return;
-      for (const layer of sym.TL.L) {
+    function recurse(symbolName, localFrame, tf) {
+      const sym = symbols[symbolName];
+      if (!sym || !sym.TL?.L) return;
+      sym.TL.L.forEach(layer => {
         const fr = (layer.FR || []).find(r => localFrame >= (r.I || 0) && localFrame < (r.I || 0) + (r.DU || 1));
-        if (!fr) continue;
-        for (const el of fr.E || []) {
+        if (!fr) return;
+        (fr.E || []).forEach(el => {
           if (el.ASI) {
-            const key = findAtlasKey(el.ASI.N);
-            if (!key) {
-              console.warn('Piece missing in atlas (ASI):', el.ASI.N);
-              continue;
+            const rectKey = findAtlasKey(el.ASI.N);
+            if (!rectKey) {
+              console.warn('Imagen no encontrada (ASI):', el.ASI.N);
+              return;
             }
-            const rect = atlas[key];
+            const rect = atlas[rectKey];
             const m = m3dToAffine(el.ASI.M3D || []);
-            out.push({ rect, transform: mulAffine(tf, m), sourceName: key });
+            out.push({ rect, transform: mulAffine(tf, m), sourceName: rectKey });
           } else if (el.SI) {
             const m = m3dToAffine(el.SI.M3D || []);
             recurse(el.SI.SN, localFrame - (fr.I || 0), mulAffine(tf, m));
           }
-        }
-      }
+        });
+      });
     }
 
-    // recorrer main timeline (AN.TL or TL)
-    for (const layer of (mainTL?.L || [])) {
+    (mainTL.L || []).forEach(layer => {
       const fr = (layer.FR || []).find(r => idx >= (r.I || 0) && idx < (r.I || 0) + (r.DU || 1));
-      if (!fr) continue;
-      for (const el of fr.E || []) {
+      if (!fr) return;
+      (fr.E || []).forEach(el => {
         if (el.ASI) {
-          const key = findAtlasKey(el.ASI.N);
-          if (!key) { console.warn('Piece missing in atlas (main):', el.ASI.N); continue; }
-          out.push({ rect: atlas[key], transform: m3dToAffine(el.ASI.M3D || []), sourceName: key });
+          const rectKey = findAtlasKey(el.ASI.N);
+          if (!rectKey) {
+            console.warn('Imagen no encontrada (main):', el.ASI.N);
+            return;
+          }
+          out.push({ rect: atlas[rectKey], transform: m3dToAffine(el.ASI.M3D || []), sourceName: rectKey });
         } else if (el.SI) {
           const m = m3dToAffine(el.SI.M3D || []);
           recurse(el.SI.SN, idx - (fr.I || 0), m);
         }
-      }
-    }
+      });
+    });
 
     return out;
   }
 
-  // -------------------------
-  // Bounding box / draw
-  // -------------------------
+  // --- bbox para un conjunto de comandos ---
   function bbox(commands) {
     if (!commands || !commands.length) return { minX: 0, minY: 0, maxX: 1, maxY: 1 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const cmd of commands) {
+    commands.forEach(cmd => {
       const r = cmd.rect;
       const corners = [
         transformPoint(cmd.transform, 0, 0),
@@ -188,13 +182,13 @@
         transformPoint(cmd.transform, r.w, r.h),
         transformPoint(cmd.transform, 0, r.h)
       ];
-      for (const p of corners) {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
-      }
-    }
+      corners.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      });
+    });
     return { minX: Math.floor(minX), minY: Math.floor(minY), maxX: Math.ceil(maxX), maxY: Math.ceil(maxY) };
   }
 
@@ -206,11 +200,12 @@
       for (let i = 3; i < data.length; i += 4) if (data[i] !== 0) return false;
       return true;
     } catch (e) {
-      // Si hay problema (CORS), asumimos que no está completamente transparente para evitar falsos negativos.
+      // cross-origin or other. Assume not transparent to avoid false positives.
       return false;
     }
   }
 
+  // --- dibuja un frame (orden de comandos) ---
   function drawFrame(commands, atlasImage) {
     if (!commands || !commands.length) return null;
     const box = bbox(commands);
@@ -220,12 +215,11 @@
     c.width = w;
     c.height = h;
     const ctx = c.getContext('2d');
-
-    // dibujar en orden tal como vienen los comandos
-    for (const cmd of commands) {
-      const r = cmd.rect, m = cmd.transform;
+    // dibujar cada comando en orden (como en timeline)
+    commands.forEach(cmd => {
+      const r = cmd.rect;
+      const m = cmd.transform;
       ctx.save();
-      // trasladamos para que el bounding box comience en 0,0
       ctx.setTransform(m.a, m.b, m.c, m.d, m.tx - box.minX, m.ty - box.minY);
       try {
         ctx.drawImage(atlasImage, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
@@ -233,66 +227,63 @@
         console.warn('drawImage fallo para', cmd.sourceName, e);
       }
       ctx.restore();
-    }
-
+    });
     return c;
   }
 
-  // Fallbacks si el canvas sale totalmente transparente
+  // --- drawFrame con varios fallbacks ---
   function drawFrameWithFallbacks(commands, atlasImage, setStatus) {
-    // 1) intento directo
+    // 1) intento normal
     let canvas = drawFrame(commands, atlasImage);
     if (canvas && !isFullyTransparent(canvas)) return canvas;
 
-    setStatus?.('Frame transparente: intentando fallbacks...');
+    setStatus?.('Frame transparente: probando fallbacks...');
 
-    // 2) Intento con translation redondeada (a veces floats muy pequeños)
+    // 2) redondear tx/ty
     try {
       const rounded = commands.map(c => ({ rect: c.rect, transform: { ...c.transform, tx: Math.round(c.transform.tx), ty: Math.round(c.transform.ty) }, sourceName: c.sourceName }));
       canvas = drawFrame(rounded, atlasImage);
       if (canvas && !isFullyTransparent(canvas)) return canvas;
-    } catch (e) { /* ignore */ }
+    } catch (_) { /* ignore */ }
 
-    // 3) Ignorar rot/scale: dibujar cada pieza en su punto (transformPoint(0,0)), redondeado
+    // 3) dibujar ignorando rot/scale: colocar cada sprite usando transformPoint(0,0)
     try {
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      const box = bbox(commands);
+      const w = Math.max(1, box.maxX - box.minX);
+      const h = Math.max(1, box.maxY - box.minY);
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      let drew = false;
+      for (const cmd of commands) {
+        const r = cmd.rect;
+        const p = transformPoint(cmd.transform, 0, 0);
+        const dx = Math.round(p.x) - box.minX;
+        const dy = Math.round(p.y) - box.minY;
+        try {
+          ctx.drawImage(atlasImage, r.x, r.y, r.w, r.h, dx, dy, r.w, r.h);
+          drew = true;
+        } catch (e) { /* ignore */ }
+      }
+      if (drew && !isFullyTransparent(c)) return c;
+    } catch (_) { /* ignore */ }
+
+    // 4) dibujar piezas individuales y componer las no transparentes
+    try {
       const pieces = [];
       for (const cmd of commands) {
-        const p0 = transformPoint(cmd.transform, 0, 0);
-        minX = Math.min(minX, Math.round(p0.x));
-        minY = Math.min(minY, Math.round(p0.y));
-        maxX = Math.max(maxX, Math.round(p0.x) + cmd.rect.w);
-        maxY = Math.max(maxY, Math.round(p0.y) + cmd.rect.h);
-        pieces.push({ cmd, pos: p0 });
+        const r = cmd.rect;
+        const pc = document.createElement('canvas');
+        pc.width = Math.max(1, r.w); pc.height = Math.max(1, r.h);
+        const pctx = pc.getContext('2d');
+        try {
+          pctx.drawImage(atlasImage, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+          if (!isFullyTransparent(pc)) pieces.push({ pc, cmd });
+        } catch (e) { /* ignore */ }
       }
       if (pieces.length) {
-        const c = document.createElement('canvas');
-        c.width = Math.max(1, Math.ceil(maxX) - Math.floor(minX));
-        c.height = Math.max(1, Math.ceil(maxY) - Math.floor(minY));
-        const ctx = c.getContext('2d');
-        for (const p of pieces) {
-          const dx = Math.round(p.pos.x) - Math.floor(minX);
-          const dy = Math.round(p.pos.y) - Math.floor(minY);
-          ctx.drawImage(atlasImage, p.cmd.rect.x, p.cmd.rect.y, p.cmd.rect.w, p.cmd.rect.h, dx, dy, p.cmd.rect.w, p.cmd.rect.h);
-        }
-        if (!isFullyTransparent(c)) return c;
-      }
-    } catch (e) { /* ignore */ }
-
-    // 4) Dibujar piezas individuales y componer solo las no-transparentes (evita piezas que sean totalmente alpha)
-    try {
-      const pieceCanvases = [];
-      for (const cmd of commands) {
-        const pc = document.createElement('canvas');
-        pc.width = Math.max(1, cmd.rect.w);
-        pc.height = Math.max(1, cmd.rect.h);
-        const pctx = pc.getContext('2d');
-        pctx.drawImage(atlasImage, cmd.rect.x, cmd.rect.y, cmd.rect.w, cmd.rect.h, 0, 0, cmd.rect.w, cmd.rect.h);
-        if (!isFullyTransparent(pc)) pieceCanvases.push({ pc, cmd });
-      }
-      if (pieceCanvases.length) {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        pieceCanvases.forEach(({ cmd }) => {
+        pieces.forEach(({ cmd }) => {
           const p = transformPoint(cmd.transform, 0, 0);
           minX = Math.min(minX, p.x);
           minY = Math.min(minY, p.y);
@@ -304,28 +295,24 @@
         c.width = Math.max(1, Math.ceil(maxX) - minX);
         c.height = Math.max(1, Math.ceil(maxY) - minY);
         const ctx = c.getContext('2d');
-        pieceCanvases.forEach(({ pc, cmd }) => {
+        pieces.forEach(({ pc, cmd }) => {
           const p = transformPoint(cmd.transform, 0, 0);
           ctx.drawImage(pc, Math.round(p.x) - minX, Math.round(p.y) - minY);
         });
         if (!isFullyTransparent(c)) return c;
       }
-    } catch (e) { /* ignore */ }
+    } catch (_) { /* ignore */ }
 
-    // nada sirvió
+    // nada funcionó
     return null;
   }
 
-  // -------------------------
-  // Helpers async
-  // -------------------------
+  // --- helper promisificado ---
   function canvasToBlob(canvas) {
     return new Promise(res => canvas.toBlob(res, 'image/png'));
   }
 
-  // -------------------------
-  // Exportación principal
-  // -------------------------
+  // --- exportación principal ---
   async function exportFramesFromAnimationToZip(atlasImage, atlasData, animData, setStatus, options = {}) {
     if (!atlasImage) throw new Error('atlasImage missing');
     if (!atlasData) throw new Error('atlasData missing');
@@ -334,27 +321,23 @@
     const atlas = buildAtlasMap(atlasData);
     const symbols = buildSymbolMap(animData);
     const mainTL = animData?.AN?.TL || animData?.TL;
-    if (!mainTL || !mainTL.L) throw new Error('Timeline principal no encontrada en animation.json');
+    if (!mainTL?.L) throw new Error('Timeline principal no encontrada en animation.json');
 
+    // frames 0..maxEnd-1
     const frames = collectFrameIndices(mainTL);
-    if (!frames.length) {
-      // fallback mínimo
-      frames.push(0);
-    }
+    if (!frames.length) frames.push(0);
 
-    // Si previewOnly: devolvemos primer canvas útil
+    // Si previewOnly, devolvemos el primer canvas válido que podamos construir
     if (options.previewOnly) {
-      // intentar generar primer frame práctico (el primero en frames)
+      setStatus?.('Preview: buscando primer frame...');
       for (let i = 0; i < frames.length; i++) {
         const idx = frames[i];
-        setStatus?.(`Generando preview frame idx ${idx} (${i+1}/${frames.length})`);
         try {
           const cmds = collectCommands(mainTL, symbols, atlas, idx);
           if (!cmds.length) continue;
-          const canvas = drawFrameWithFallbacks(cmds, atlasImage, setStatus);
-          if (canvas) return canvas;
-        } catch (e) { console.warn('Preview frame error', e); }
-        await new Promise(r => setTimeout(r, 0));
+          const cv = drawFrameWithFallbacks(cmds, atlasImage, setStatus);
+          if (cv) return cv;
+        } catch (e) { console.warn('Preview frame error', e); continue; }
       }
       return null;
     }
@@ -367,40 +350,40 @@
       setStatus?.(`Procesando frame ${i + 1}/${frames.length} (idx ${idx})`);
       try {
         const cmds = collectCommands(mainTL, symbols, atlas, idx);
-
         if (!cmds.length) {
           setStatus?.(`Frame ${idx} vacío (sin comandos)`);
-          // guardamos placeholder 1x1 transparente para mantener índice si se desea
-          const tiny = document.createElement('canvas');
-          tiny.width = 1; tiny.height = 1;
-          const blob = await canvasToBlob(tiny);
-          folder.file(`empty_${String(idx).padStart(4,'0')}.png`, blob);
+          // crear placeholder tiny para mantener índice
+          const tiny = document.createElement('canvas'); tiny.width = 1; tiny.height = 1;
+          const blobTiny = await canvasToBlob(tiny);
+          folder.file(`empty_${String(idx).padStart(4, '0')}.png`, blobTiny);
           await new Promise(r => setTimeout(r, 0));
           continue;
         }
 
         let canvas = drawFrameWithFallbacks(cmds, atlasImage, setStatus);
+
         if (!canvas) {
-          // último recurso: tomar la primera pieza cruda
+          // fallback final: dibujar la primera pieza cruda (no ideal, pero evita perdida total)
+          setStatus?.(`Frame ${idx}: reconstrucción fallida, fallback pieza cruda`);
           const r = cmds[0].rect;
           const c2 = document.createElement('canvas');
           c2.width = Math.max(1, r.w); c2.height = Math.max(1, r.h);
           c2.getContext('2d').drawImage(atlasImage, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
           canvas = c2;
-          setStatus?.(`Frame ${idx}: usando primer sprite como fallback`);
         }
 
         const blob = await canvasToBlob(canvas);
-        folder.file(`frame_${String(idx).padStart(4,'0')}.png`, blob);
+        const fname = `frame_${String(idx).padStart(4, '0')}.png`;
+        folder.file(fname, blob);
       } catch (err) {
-        console.error(`Error frame ${idx}:`, err);
+        console.error(`Error procesando frame ${idx}:`, err);
         setStatus?.(`Error frame ${idx}: ${err.message || err}`);
-        // placeholder para que no se rompa el orden
+        // crear placeholder tiny para no perder índice
         const tiny = document.createElement('canvas'); tiny.width = 1; tiny.height = 1;
-        const blob = await canvasToBlob(tiny);
-        folder.file(`error_${String(idx).padStart(4,'0')}.png`, blob);
+        const blobTiny = await canvasToBlob(tiny);
+        folder.file(`error_${String(idx).padStart(4, '0')}.png`, blobTiny);
       }
-      // yield to event loop
+      // cede el event loop para que la UI responda
       await new Promise(r => setTimeout(r, 0));
     }
 
@@ -410,9 +393,7 @@
     return zipBlob;
   }
 
-  // -------------------------
-  // Exponer funciones para UI / preview
-  // -------------------------
+  // --- exponer utilidades globalmente (ui.js usa varias) ---
   window.exportFramesFromAnimationToZip = exportFramesFromAnimationToZip;
   window.buildAtlasMap = buildAtlasMap;
   window.buildSymbolMap = buildSymbolMap;
