@@ -1,33 +1,10 @@
-// main.js - Sistema completo de animación y recorte de spritemaps
+// main.js - Sistema completo de animación y exportación
 (function() {
   'use strict';
 
   // Variables globales
-  let atlasImage = null;
-  let atlasData = null;
-  let animationData = null;
-  let animationFrames = [];
-  let currentFrame = 0;
-  let isPlaying = false;
-  let animationInterval = null;
-
-  // Elementos del DOM
-  const elements = {
-    pngInput: document.getElementById('pngInput'),
-    jsonInput: document.getElementById('jsonInput'),
-    animInput: document.getElementById('animInput'),
-    dropBoxPng: document.getElementById('dropBoxPng'),
-    dropBoxAtlas: document.getElementById('dropBoxAtlas'),
-    dropBoxAnim: document.getElementById('dropBoxAnim'),
-    previewPNG: document.getElementById('previewPNG'),
-    previewAnim: document.getElementById('previewAnim'),
-    statusEl: document.getElementById('status'),
-    convertBtn: document.getElementById('convertir'),
-    openZipBtn: document.getElementById('openZipTab'),
-    playBtn: null,
-    stopBtn: null,
-    frameInfo: null
-  };
+  let animationEngine = null;
+  let elements = {};
 
   // Utilidades
   const utils = {
@@ -63,189 +40,6 @@
     }
   };
 
-  // Sistema de animación
-  const animationSystem = {
-    // Construye el mapa del atlas
-    buildAtlasMap: (data) => {
-      const map = {};
-      if (!data || typeof data !== 'object') return map;
-
-      // Formato Adobe Animate
-      if (data?.ATLAS?.SPRITES && Array.isArray(data.ATLAS.SPRITES)) {
-        data.ATLAS.SPRITES.forEach(item => {
-          const sprite = item.SPRITE || {};
-          if (sprite.name) {
-            map[sprite.name] = {
-              x: Number(sprite.x || 0),
-              y: Number(sprite.y || 0),
-              w: Number(sprite.w || 0),
-              h: Number(sprite.h || 0)
-            };
-          }
-        });
-      }
-      return map;
-    },
-
-    // Extrae frames de la animación
-    extractAnimationFrames: (animData, atlasMap) => {
-      const frames = [];
-      if (!animData?.ANIMATION?.TIMELINE?.LAYERS) return frames;
-
-      const layers = animData.ANIMATION.TIMELINE.LAYERS;
-      
-      layers.forEach(layer => {
-        if (layer?.Frames && Array.isArray(layer.Frames)) {
-          layer.Frames.forEach((frame, frameIndex) => {
-            if (!frames[frameIndex]) frames[frameIndex] = [];
-            
-            if (frame?.elements && Array.isArray(frame.elements)) {
-              frame.elements.forEach(element => {
-                const symbolInstance = element.SYMBOL_Instance;
-                if (symbolInstance) {
-                  // Extraer información de transformación
-                  const matrix = symbolInstance.Matrix3D;
-                  const position = symbolInstance.DecomposedMatrix?.Position;
-                  
-                  const spriteName = String(frameIndex).padStart(4, '0');
-                  
-                  if (atlasMap[spriteName]) {
-                    frames[frameIndex].push({
-                      sprite: spriteName,
-                      x: position?.x || matrix?.m30 || 0,
-                      y: position?.y || matrix?.m31 || 0,
-                      atlasData: atlasMap[spriteName]
-                    });
-                  }
-                }
-              });
-            }
-          });
-        }
-      });
-
-      return frames.filter(frame => frame && frame.length > 0);
-    },
-
-    // Dibuja un frame específico
-    drawFrame: (canvas, frameData, image) => {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      frameData.forEach(item => {
-        const { atlasData, x, y } = item;
-        
-        // Dibuja el sprite recortado en la posición especificada
-        ctx.drawImage(
-          image,
-          atlasData.x, atlasData.y, atlasData.w, atlasData.h,
-          x - atlasData.w/2, y - atlasData.h/2, atlasData.w, atlasData.h
-        );
-      });
-    },
-
-    // Configura el canvas de animación
-    setupAnimationCanvas: () => {
-      if (!elements.previewAnim) return;
-      
-      elements.previewAnim.width = 1920;
-      elements.previewAnim.height = 1080;
-      elements.previewAnim.style.display = 'block';
-    },
-
-    // Inicia la animación
-    startAnimation: () => {
-      if (!animationFrames.length || !atlasImage) return;
-
-      isPlaying = true;
-      currentFrame = 0;
-      
-      animationInterval = setInterval(() => {
-        if (currentFrame >= animationFrames.length) {
-          currentFrame = 0;
-        }
-        
-        animationSystem.drawFrame(elements.previewAnim, animationFrames[currentFrame], atlasImage);
-        
-        if (elements.frameInfo) {
-          elements.frameInfo.textContent = `Frame: ${currentFrame + 1} / ${animationFrames.length}`;
-        }
-        
-        currentFrame++;
-      }, 100); // 10 FPS
-    },
-
-    // Detiene la animación
-    stopAnimation: () => {
-      isPlaying = false;
-      if (animationInterval) {
-        clearInterval(animationInterval);
-        animationInterval = null;
-      }
-    }
-  };
-
-  // Sistema de exportación
-  const exportSystem = {
-    // Exporta frames individuales como ZIP
-    exportFrames: async (frames, image, atlasMap) => {
-      if (!frames.length) return null;
-
-      const zip = new JSZip();
-      const folder = zip.folder('animation_frames');
-
-      for (let i = 0; i < frames.length; i++) {
-        const canvas = document.createElement('canvas');
-        canvas.width = 1920;
-        canvas.height = 1080;
-        
-        animationSystem.drawFrame(canvas, frames[i], image);
-        
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        folder.file(`frame_${String(i).padStart(4, '0')}.png`, blob);
-        
-        utils.setStatus(`Exportando frame ${i + 1}/${frames.length}...`);
-        await new Promise(r => setTimeout(r, 0));
-      }
-
-      utils.setStatus('Comprimiendo archivo ZIP...');
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      return zipBlob;
-    },
-
-    // Exporta piezas del atlas como ZIP
-    exportAtlasPieces: async (atlasImage, atlasData) => {
-      const sprites = atlasData?.ATLAS?.SPRITES;
-      if (!sprites) throw new Error('Estructura de atlas inválida.');
-
-      const zip = new JSZip();
-      const folder = zip.folder('pieces');
-
-      for (let i = 0; i < sprites.length; i++) {
-        const sprite = sprites[i].SPRITE;
-        const name = (sprite.name || `piece_${i}`).replace(/\s+/g, '_') + '.png';
-
-        const canvas = document.createElement('canvas');
-        canvas.width = sprite.w;
-        canvas.height = sprite.h;
-        
-        canvas.getContext('2d').drawImage(
-          atlasImage, sprite.x, sprite.y, sprite.w, sprite.h,
-          0, 0, sprite.w, sprite.h
-        );
-        
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        folder.file(name, blob);
-
-        utils.setStatus(`Recortando ${name} (${i + 1}/${sprites.length})`);
-        await new Promise(r => setTimeout(r, 0));
-      }
-
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
-      return zipBlob;
-    }
-  };
-
   // UI Controller
   const uiController = {
     // Configura drag & drop
@@ -278,41 +72,103 @@
       });
     },
 
-    // Crea controles de animación
+    // Crea controles de animación mejorados
     createAnimationControls: () => {
+      const existingControls = document.querySelector('.animation-controls');
+      if (existingControls) {
+        existingControls.remove();
+      }
+
       const controlsDiv = document.createElement('div');
       controlsDiv.className = 'animation-controls';
       controlsDiv.innerHTML = `
-        <button id="playBtn" class="control-btn">▶️ Play</button>
-        <button id="stopBtn" class="control-btn">⏹️ Stop</button>
-        <span id="frameInfo" class="frame-info">Frame: 0 / 0</span>
+        <div class="control-row">
+          <button id="playBtn" class="control-btn">▶️ Play</button>
+          <button id="pauseBtn" class="control-btn">⏸️ Pause</button>
+          <button id="stopBtn" class="control-btn">⏹️ Stop</button>
+          <button id="prevFrameBtn" class="control-btn">⏮️ Prev</button>
+          <button id="nextFrameBtn" class="control-btn">⏭️ Next</button>
+        </div>
+        <div class="control-row">
+          <label for="fpsSlider">FPS:</label>
+          <input type="range" id="fpsSlider" min="1" max="30" value="10">
+          <span id="fpsValue">10</span>
+        </div>
+        <div class="control-row">
+          <span id="frameInfo" class="frame-info">Frame: 0 / 0</span>
+          <span id="animInfo" class="anim-info">Animación: -</span>
+        </div>
       `;
       
       elements.previewAnim.parentNode.insertBefore(controlsDiv, elements.previewAnim.nextSibling);
       
+      // Referencias a elementos de control
       elements.playBtn = document.getElementById('playBtn');
+      elements.pauseBtn = document.getElementById('pauseBtn');
       elements.stopBtn = document.getElementById('stopBtn');
+      elements.prevFrameBtn = document.getElementById('prevFrameBtn');
+      elements.nextFrameBtn = document.getElementById('nextFrameBtn');
+      elements.fpsSlider = document.getElementById('fpsSlider');
+      elements.fpsValue = document.getElementById('fpsValue');
       elements.frameInfo = document.getElementById('frameInfo');
+      elements.animInfo = document.getElementById('animInfo');
 
+      // Event listeners
       elements.playBtn.addEventListener('click', () => {
-        if (!isPlaying) {
-          animationSystem.startAnimation();
-          elements.playBtn.textContent = '⏸️ Pause';
-        } else {
-          animationSystem.stopAnimation();
-          elements.playBtn.textContent = '▶️ Play';
+        if (animationEngine) {
+          animationEngine.play(elements.previewAnim, (current, total) => {
+            elements.frameInfo.textContent = `Frame: ${current} / ${total}`;
+          });
+        }
+      });
+
+      elements.pauseBtn.addEventListener('click', () => {
+        if (animationEngine) {
+          animationEngine.pause();
         }
       });
 
       elements.stopBtn.addEventListener('click', () => {
-        animationSystem.stopAnimation();
-        elements.playBtn.textContent = '▶️ Play';
-        currentFrame = 0;
-        if (animationFrames.length > 0) {
-          animationSystem.drawFrame(elements.previewAnim, animationFrames[0], atlasImage);
-          elements.frameInfo.textContent = `Frame: 1 / ${animationFrames.length}`;
+        if (animationEngine) {
+          animationEngine.stop();
+          elements.frameInfo.textContent = `Frame: 1 / ${animationEngine.frames.length}`;
+          if (animationEngine.frames.length > 0) {
+            animationEngine.renderFrame(elements.previewAnim, animationEngine.frames[0], animationEngine.atlasImage);
+          }
         }
       });
+
+      elements.prevFrameBtn.addEventListener('click', () => {
+        if (animationEngine) {
+          const newFrame = Math.max(0, animationEngine.currentFrame - 1);
+          animationEngine.goToFrame(newFrame, elements.previewAnim);
+          elements.frameInfo.textContent = `Frame: ${newFrame + 1} / ${animationEngine.frames.length}`;
+        }
+      });
+
+      elements.nextFrameBtn.addEventListener('click', () => {
+        if (animationEngine) {
+          const newFrame = Math.min(animationEngine.frames.length - 1, animationEngine.currentFrame + 1);
+          animationEngine.goToFrame(newFrame, elements.previewAnim);
+          elements.frameInfo.textContent = `Frame: ${newFrame + 1} / ${animationEngine.frames.length}`;
+        }
+      });
+
+      elements.fpsSlider.addEventListener('input', (e) => {
+        const fps = parseInt(e.target.value);
+        elements.fpsValue.textContent = fps;
+        if (animationEngine) {
+          animationEngine.setFPS(fps);
+        }
+      });
+    },
+
+    // Actualiza la información de la animación
+    updateAnimationInfo: () => {
+      if (animationEngine) {
+        const info = animationEngine.getInfo();
+        elements.animInfo.textContent = `Animación: ${info.animationName} (${info.symbolName})`;
+      }
     }
   };
 
@@ -323,18 +179,23 @@
         utils.setStatus('Cargando imagen...');
         const dataUrl = await utils.fileToDataURL(file);
         
-        atlasImage = new Image();
-        atlasImage.onload = () => {
+        const image = new Image();
+        image.onload = () => {
           elements.previewPNG.style.display = 'block';
-          elements.previewPNG.width = atlasImage.width;
-          elements.previewPNG.height = atlasImage.height;
+          elements.previewPNG.width = image.width;
+          elements.previewPNG.height = image.height;
           
           const ctx = elements.previewPNG.getContext('2d');
-          ctx.drawImage(atlasImage, 0, 0);
+          ctx.drawImage(image, 0, 0);
+          
+          // Guardar referencia a la imagen
+          if (animationEngine) {
+            animationEngine.atlasImage = image;
+          }
           
           utils.setStatus('Imagen cargada correctamente');
         };
-        atlasImage.src = dataUrl;
+        image.src = dataUrl;
       } catch (error) {
         utils.setStatus('Error al cargar la imagen: ' + error.message);
       }
@@ -344,8 +205,18 @@
       try {
         utils.setStatus('Cargando atlas...');
         const text = await utils.fileToText(file);
-        atlasData = JSON.parse(text);
+        const atlasData = JSON.parse(text);
+        
+        if (animationEngine) {
+          animationEngine.atlasData = atlasData;
+        }
+        
         utils.setStatus('Atlas cargado correctamente');
+        
+        // Intentar cargar animación si ya existe
+        if (animationEngine?.animationData) {
+          await fileHandlers.processAnimation();
+        }
       } catch (error) {
         utils.setStatus('Error al cargar el atlas: ' + error.message);
       }
@@ -355,33 +226,149 @@
       try {
         utils.setStatus('Cargando animación...');
         const text = await utils.fileToText(file);
-        animationData = JSON.parse(text);
+        const animationData = JSON.parse(text);
         
-        if (atlasData) {
-          const atlasMap = animationSystem.buildAtlasMap(atlasData);
-          animationFrames = animationSystem.extractAnimationFrames(animationData, atlasMap);
-          
-          if (animationFrames.length > 0) {
-            animationSystem.setupAnimationCanvas();
-            uiController.createAnimationControls();
-            
-            // Mostrar primer frame
-            animationSystem.drawFrame(elements.previewAnim, animationFrames[0], atlasImage);
-            elements.frameInfo.textContent = `Frame: 1 / ${animationFrames.length}`;
-            
-            utils.setStatus(`Animación cargada: ${animationFrames.length} frames`);
-          } else {
-            utils.setStatus('No se encontraron frames en la animación');
-          }
+        if (animationEngine) {
+          animationEngine.animationData = animationData;
         }
+        
+        utils.setStatus('Animación cargada correctamente');
+        
+        // Intentar procesar la animación
+        await fileHandlers.processAnimation();
       } catch (error) {
         utils.setStatus('Error al cargar la animación: ' + error.message);
+      }
+    },
+
+    processAnimation: async () => {
+      if (!animationEngine || !animationEngine.atlasImage || !animationEngine.atlasData || !animationEngine.animationData) {
+        return;
+      }
+
+      try {
+        utils.setStatus('Procesando animación...');
+        
+        const frameCount = await animationEngine.loadData(
+          animationEngine.atlasImage,
+          animationEngine.atlasData,
+          animationEngine.animationData
+        );
+
+        if (frameCount > 0) {
+          // Configurar canvas
+          animationEngine.setupCanvas(elements.previewAnim);
+          
+          // Crear controles
+          uiController.createAnimationControls();
+          
+          // Mostrar primer frame
+          if (animationEngine.frames.length > 0) {
+            animationEngine.renderFrame(elements.previewAnim, animationEngine.frames[0], animationEngine.atlasImage);
+            elements.frameInfo.textContent = `Frame: 1 / ${frameCount}`;
+          }
+
+          uiController.updateAnimationInfo();
+          utils.setStatus(`Animación procesada: ${frameCount} frames`);
+        } else {
+          utils.setStatus('No se pudieron extraer frames de la animación');
+        }
+      } catch (error) {
+        utils.setStatus('Error al procesar animación: ' + error.message);
+      }
+    }
+  };
+
+  // Sistema de exportación
+  const exportSystem = {
+    exportAnimation: async () => {
+      if (!animationEngine || !animationEngine.frames.length) {
+        utils.setStatus('No hay animación para exportar');
+        return null;
+      }
+
+      try {
+        utils.setStatus('Exportando animación...');
+        
+        const zip = new JSZip();
+        
+        await animationEngine.exportFrames(zip, (current, total) => {
+          utils.setStatus(`Exportando frame ${current}/${total}...`);
+        });
+
+        utils.setStatus('Comprimiendo archivo ZIP...');
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        
+        return zipBlob;
+      } catch (error) {
+        utils.setStatus('Error al exportar animación: ' + error.message);
+        throw error;
+      }
+    },
+
+    exportAtlasPieces: async () => {
+      if (!animationEngine?.atlasImage || !animationEngine?.atlasData) {
+        utils.setStatus('No hay atlas para exportar');
+        return null;
+      }
+
+      try {
+        utils.setStatus('Exportando piezas del atlas...');
+        
+        const zip = new JSZip();
+        const sprites = animationEngine.atlasData.ATLAS.SPRITES;
+        
+        const folder = zip.folder('pieces');
+        const canvas = document.createElement('canvas');
+
+        for (let i = 0; i < sprites.length; i++) {
+          const sprite = sprites[i].SPRITE;
+          const name = (sprite.name || `piece_${i}`).replace(/\s+/g, '_') + '.png';
+
+          canvas.width = sprite.w;
+          canvas.height = sprite.h;
+          
+          canvas.getContext('2d').drawImage(
+            animationEngine.atlasImage, sprite.x, sprite.y, sprite.w, sprite.h,
+            0, 0, sprite.w, sprite.h
+          );
+          
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          folder.file(name, blob);
+
+          utils.setStatus(`Recortando ${name} (${i + 1}/${sprites.length})`);
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        return zipBlob;
+      } catch (error) {
+        utils.setStatus('Error al exportar atlas: ' + error.message);
+        throw error;
       }
     }
   };
 
   // Inicialización
   const init = () => {
+    // Obtener referencias a elementos del DOM
+    elements = {
+      pngInput: document.getElementById('pngInput'),
+      jsonInput: document.getElementById('jsonInput'),
+      animInput: document.getElementById('animInput'),
+      dropBoxPng: document.getElementById('dropBoxPng'),
+      dropBoxAtlas: document.getElementById('dropBoxAtlas'),
+      dropBoxAnim: document.getElementById('dropBoxAnim'),
+      previewPNG: document.getElementById('previewPNG'),
+      previewAnim: document.getElementById('previewAnim'),
+      statusEl: document.getElementById('status'),
+      convertBtn: document.getElementById('convertir'),
+      openZipBtn: document.getElementById('openZipTab')
+    };
+
+    // Crear instancia del motor de animación
+    animationEngine = new AnimationEngine();
+
     // Configurar drag & drop
     uiController.setupDragDrop(elements.dropBoxPng, elements.pngInput, fileHandlers.handlePngFile);
     uiController.setupDragDrop(elements.dropBoxAtlas, elements.jsonInput, fileHandlers.handleAtlasFile);
@@ -389,8 +376,8 @@
 
     // Configurar botón de conversión
     elements.convertBtn.addEventListener('click', async () => {
-      if (!atlasImage || !atlasData) {
-        utils.setStatus('Por favor carga primero el spritemap y el atlas');
+      if (!animationEngine) {
+        utils.setStatus('El sistema no está inicializado');
         return;
       }
 
@@ -398,23 +385,30 @@
         elements.convertBtn.disabled = true;
         
         let zipBlob;
-        if (animationFrames.length > 0) {
-          utils.setStatus('Exportando animación...');
-          zipBlob = await exportSystem.exportFrames(animationFrames, atlasImage, atlasData);
+        
+        // Si hay animación cargada, exportar frames
+        if (animationEngine.frames.length > 0) {
+          zipBlob = await exportSystem.exportAnimation();
+        } 
+        // Si solo hay atlas, exportar piezas
+        else if (animationEngine.atlasData) {
+          zipBlob = await exportSystem.exportAtlasPieces();
         } else {
-          utils.setStatus('Exportando piezas del atlas...');
-          zipBlob = await exportSystem.exportAtlasPieces(atlasImage, atlasData);
+          utils.setStatus('Por favor carga al menos el spritemap y el atlas');
+          return;
         }
 
-        // Crear enlace de descarga
-        const url = URL.createObjectURL(zipBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = animationFrames.length > 0 ? 'animation_frames.zip' : 'atlas_pieces.zip';
-        a.click();
-        
-        URL.revokeObjectURL(url);
-        utils.setStatus('Exportación completada');
+        if (zipBlob) {
+          // Crear enlace de descarga
+          const url = URL.createObjectURL(zipBlob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = animationEngine.frames.length > 0 ? 'animation_frames.zip' : 'atlas_pieces.zip';
+          a.click();
+          
+          URL.revokeObjectURL(url);
+          utils.setStatus('Exportación completada exitosamente');
+        }
       } catch (error) {
         utils.setStatus('Error en la exportación: ' + error.message);
       } finally {
@@ -422,7 +416,12 @@
       }
     });
 
-    utils.setStatus('Sistema inicializado. Carga los archivos para comenzar.');
+    // Configurar botón de abrir ZIP (si se necesita)
+    elements.openZipBtn.addEventListener('click', () => {
+      utils.setStatus('Función no implementada aún');
+    });
+
+    utils.setStatus('🚀 Sistema inicializado. Carga los archivos para comenzar.');
   };
 
   // Iniciar cuando el DOM esté listo
