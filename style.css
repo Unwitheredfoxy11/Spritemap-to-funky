@@ -1,0 +1,273 @@
+/* ======== Estilos generales ======== */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    color: #f1f1f1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    margin: 0;
+    min-height: 100vh;
+}
+
+/* Encabezado */
+h1 {
+    margin-bottom: 25px;
+    font-size: 2.5rem;
+    text-align: center;
+    letter-spacing: 1px;
+    background: linear-gradient(90deg, #00e0ff, #9b5eff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* ======== Inputs ======== */
+.inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(12px);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 25px;
+    width: 100%;
+    max-width: 620px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.inputs:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.7);
+}
+
+.inputs label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #dcdcdc;
+}
+
+/* Input de archivo estilizado */
+.inputs input[type="file"] {
+    padding: 10px 14px;
+    border-radius: 8px;
+    background-color: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #e0e0e0;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+}
+
+.inputs input[type="file"]::-webkit-file-upload-button {
+    background: linear-gradient(135deg, #3a3ad9, #6a0dad);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 12px;
+    transition: background 0.3s, transform 0.2s;
+}
+
+.inputs input[type="file"]::-webkit-file-upload-button:hover {
+    background: linear-gradient(135deg, #5f5fff, #8e2de2);
+    transform: scale(1.05);
+}
+
+/* ======== Canvas de previsualización ======== */
+canvas {
+    border-radius: 10px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+    margin-top: 15px;
+    background: rgba(0, 0, 0, 0.3);
+}
+
+#previewPNG {
+    max-width: 100%;
+    height: auto;
+}
+
+#previewAnim {
+    max-width: 100%;
+    height: auto;
+    border: 2px solid #00e0ff;
+}
+
+/* ======== Controles de animación ======== */
+.animation-controls {
+    display: flex;
+    gap: 15px;
+    align-items: center;
+    justify-content: center;
+    margin: 20px 0;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+}
+
+.control-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #00e0ff, #9b5eff);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+}
+
+.control-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 224, 255, 0.4);
+}
+
+.control-btn:active {
+    transform: translateY(0);
+}
+
+.frame-info {
+    color: #00e0ff;
+    font-weight: bold;
+    font-size: 1.1rem;
+    padding: 8px 15px;
+    background: rgba(0, 224, 255, 0.1);
+    border-radius: 8px;
+    border: 1px solid rgba(0, 224, 255, 0.3);
+}
+
+/* ======== Botones principales ======== */
+.controls {
+    display: flex;
+    gap: 15px;
+    margin: 25px 0;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+button:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(255, 107, 107, 0.4);
+}
+
+button:active {
+    transform: translateY(-1px);
+}
+
+button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+#openZipTab {
+    background: linear-gradient(135deg, #4ecdc4, #44a08d);
+    box-shadow: 0 4px 15px rgba(78, 205, 196, 0.3);
+}
+
+#openZipTab:hover {
+    box-shadow: 0 8px 25px rgba(78, 205, 196, 0.4);
+}
+
+/* ======== Estado ======== */
+#status {
+    margin: 20px 0;
+    padding: 15px 25px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    border-left: 4px solid #00e0ff;
+    font-weight: 500;
+    text-align: center;
+    min-height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ======== Footer ======== */
+.footer {
+    margin-top: auto;
+    padding: 20px;
+    text-align: center;
+    color: #888;
+    font-size: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    width: 100%;
+}
+
+/* ======== Responsive ======== */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    .inputs {
+        padding: 20px;
+        margin: 10px 0;
+    }
+    
+    .controls {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .animation-controls {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    canvas {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+/* ======== Animaciones ======== */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+.inputs.hover {
+    animation: pulse 0.3s ease-in-out;
+}
+
+/* ======== Scrollbar personalizada ======== */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #00e0ff, #9b5eff);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #9b5eff, #00e0ff);
+}
