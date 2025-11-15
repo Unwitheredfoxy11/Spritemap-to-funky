@@ -1,17 +1,19 @@
-// main.js - Sistema completo de animación y exportación
+// main.js - Sistema de extracción directa de frames sin previsualización
 (function() {
   'use strict';
 
   // Variables globales
-  let animationEngine = null;
+  let frameExtractor = null;
   let elements = {};
+  let isProcessing = false;
 
   // Utilidades
   const utils = {
-    setStatus: (message) => {
+    setStatus: (message, isError = false) => {
       if (elements.statusEl) {
         elements.statusEl.textContent = message;
-        console.log('[STATUS]', message);
+        elements.statusEl.className = isError ? 'error' : '';
+        console.log(isError ? '[ERROR]' : '[STATUS]', message);
       }
     },
 
@@ -37,10 +39,20 @@
       } catch (e) {
         console.warn('DataTransfer no disponible', e);
       }
+    },
+
+    // Descarga un archivo
+    downloadFile: (blob, filename) => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
     }
   };
 
-  // UI Controller
+  // UI Controller simplificado
   const uiController = {
     // Configura drag & drop
     setupDragDrop: (dropBox, input, callback) => {
@@ -72,103 +84,15 @@
       });
     },
 
-    // Crea controles de animación mejorados
-    createAnimationControls: () => {
-      const existingControls = document.querySelector('.animation-controls');
-      if (existingControls) {
-        existingControls.remove();
-      }
-
-      const controlsDiv = document.createElement('div');
-      controlsDiv.className = 'animation-controls';
-      controlsDiv.innerHTML = `
-        <div class="control-row">
-          <button id="playBtn" class="control-btn">▶️ Play</button>
-          <button id="pauseBtn" class="control-btn">⏸️ Pause</button>
-          <button id="stopBtn" class="control-btn">⏹️ Stop</button>
-          <button id="prevFrameBtn" class="control-btn">⏮️ Prev</button>
-          <button id="nextFrameBtn" class="control-btn">⏭️ Next</button>
-        </div>
-        <div class="control-row">
-          <label for="fpsSlider">FPS:</label>
-          <input type="range" id="fpsSlider" min="1" max="30" value="10">
-          <span id="fpsValue">10</span>
-        </div>
-        <div class="control-row">
-          <span id="frameInfo" class="frame-info">Frame: 0 / 0</span>
-          <span id="animInfo" class="anim-info">Animación: -</span>
-        </div>
-      `;
+    // Muestra/oculta elementos de carga
+    setLoadingState: (isLoading) => {
+      isProcessing = isLoading;
+      elements.convertBtn.disabled = isLoading;
+      elements.convertBtn.textContent = isLoading ? '⏳ Procesando...' : '📦 Exportar Frames';
       
-      elements.previewAnim.parentNode.insertBefore(controlsDiv, elements.previewAnim.nextSibling);
-      
-      // Referencias a elementos de control
-      elements.playBtn = document.getElementById('playBtn');
-      elements.pauseBtn = document.getElementById('pauseBtn');
-      elements.stopBtn = document.getElementById('stopBtn');
-      elements.prevFrameBtn = document.getElementById('prevFrameBtn');
-      elements.nextFrameBtn = document.getElementById('nextFrameBtn');
-      elements.fpsSlider = document.getElementById('fpsSlider');
-      elements.fpsValue = document.getElementById('fpsValue');
-      elements.frameInfo = document.getElementById('frameInfo');
-      elements.animInfo = document.getElementById('animInfo');
-
-      // Event listeners
-      elements.playBtn.addEventListener('click', () => {
-        if (animationEngine) {
-          animationEngine.play(elements.previewAnim, (current, total) => {
-            elements.frameInfo.textContent = `Frame: ${current} / ${total}`;
-          });
-        }
-      });
-
-      elements.pauseBtn.addEventListener('click', () => {
-        if (animationEngine) {
-          animationEngine.pause();
-        }
-      });
-
-      elements.stopBtn.addEventListener('click', () => {
-        if (animationEngine) {
-          animationEngine.stop();
-          elements.frameInfo.textContent = `Frame: 1 / ${animationEngine.frames.length}`;
-          if (animationEngine.frames.length > 0) {
-            animationEngine.renderFrame(elements.previewAnim, animationEngine.frames[0], animationEngine.atlasImage);
-          }
-        }
-      });
-
-      elements.prevFrameBtn.addEventListener('click', () => {
-        if (animationEngine) {
-          const newFrame = Math.max(0, animationEngine.currentFrame - 1);
-          animationEngine.goToFrame(newFrame, elements.previewAnim);
-          elements.frameInfo.textContent = `Frame: ${newFrame + 1} / ${animationEngine.frames.length}`;
-        }
-      });
-
-      elements.nextFrameBtn.addEventListener('click', () => {
-        if (animationEngine) {
-          const newFrame = Math.min(animationEngine.frames.length - 1, animationEngine.currentFrame + 1);
-          animationEngine.goToFrame(newFrame, elements.previewAnim);
-          elements.frameInfo.textContent = `Frame: ${newFrame + 1} / ${animationEngine.frames.length}`;
-        }
-      });
-
-      elements.fpsSlider.addEventListener('input', (e) => {
-        const fps = parseInt(e.target.value);
-        elements.fpsValue.textContent = fps;
-        if (animationEngine) {
-          animationEngine.setFPS(fps);
-        }
-      });
-    },
-
-    // Actualiza la información de la animación
-    updateAnimationInfo: () => {
-      if (animationEngine) {
-        const info = animationEngine.getInfo();
-        elements.animInfo.textContent = `Animación: ${info.animationName} (${info.symbolName})`;
-      }
+      if (elements.animInput) elements.animInput.disabled = isLoading;
+      if (elements.jsonInput) elements.jsonInput.disabled = isLoading;
+      if (elements.pngInput) elements.pngInput.disabled = isLoading;
     }
   };
 
@@ -181,23 +105,14 @@
         
         const image = new Image();
         image.onload = () => {
-          elements.previewPNG.style.display = 'block';
-          elements.previewPNG.width = image.width;
-          elements.previewPNG.height = image.height;
-          
-          const ctx = elements.previewPNG.getContext('2d');
-          ctx.drawImage(image, 0, 0);
-          
-          // Guardar referencia a la imagen
-          if (animationEngine) {
-            animationEngine.atlasImage = image;
+          if (frameExtractor) {
+            frameExtractor.atlasImage = image;
           }
-          
-          utils.setStatus('Imagen cargada correctamente');
+          utils.setStatus(`✅ Imagen cargada: ${image.width}x${image.height}px`);
         };
         image.src = dataUrl;
       } catch (error) {
-        utils.setStatus('Error al cargar la imagen: ' + error.message);
+        utils.setStatus(`❌ Error al cargar imagen: ${error.message}`, true);
       }
     },
 
@@ -207,18 +122,14 @@
         const text = await utils.fileToText(file);
         const atlasData = JSON.parse(text);
         
-        if (animationEngine) {
-          animationEngine.atlasData = atlasData;
+        if (frameExtractor) {
+          frameExtractor.atlasData = atlasData;
         }
         
-        utils.setStatus('Atlas cargado correctamente');
-        
-        // Intentar cargar animación si ya existe
-        if (animationEngine?.animationData) {
-          await fileHandlers.processAnimation();
-        }
+        const spriteCount = atlasData?.ATLAS?.SPRITES?.length || 0;
+        utils.setStatus(`✅ Atlas cargado: ${spriteCount} sprites`);
       } catch (error) {
-        utils.setStatus('Error al cargar el atlas: ' + error.message);
+        utils.setStatus(`❌ Error al cargar atlas: ${error.message}`, true);
       }
     },
 
@@ -228,124 +139,126 @@
         const text = await utils.fileToText(file);
         const animationData = JSON.parse(text);
         
-        if (animationEngine) {
-          animationEngine.animationData = animationData;
+        if (frameExtractor) {
+          frameExtractor.animationData = animationData;
         }
         
-        utils.setStatus('Animación cargada correctamente');
-        
-        // Intentar procesar la animación
-        await fileHandlers.processAnimation();
+        const animName = animationData?.ANIMATION?.name || 'Sin nombre';
+        utils.setStatus(`✅ Animación cargada: ${animName}`);
       } catch (error) {
-        utils.setStatus('Error al cargar la animación: ' + error.message);
+        utils.setStatus(`❌ Error al cargar animación: ${error.message}`, true);
       }
     },
 
-    processAnimation: async () => {
-      if (!animationEngine || !animationEngine.atlasImage || !animationEngine.atlasData || !animationEngine.animationData) {
-        return;
+    // Procesa la extracción de frames
+    processExtraction: async () => {
+      if (!frameExtractor || !frameExtractor.atlasImage || !frameExtractor.atlasData || !frameExtractor.animationData) {
+        utils.setStatus('❌ Faltan archivos necesarios. Carga todos los archivos primero.', true);
+        return false;
       }
 
+      uiController.setLoadingState(true);
+      
       try {
-        utils.setStatus('Procesando animación...');
+        utils.setStatus('Analizando estructura de animación...');
         
-        const frameCount = await animationEngine.loadData(
-          animationEngine.atlasImage,
-          animationEngine.atlasData,
-          animationEngine.animationData
+        // Cargar datos y extraer frames
+        const frameCount = await frameExtractor.loadData(
+          frameExtractor.atlasImage,
+          frameExtractor.atlasData,
+          frameExtractor.animationData
         );
 
-        if (frameCount > 0) {
-          // Configurar canvas
-          animationEngine.setupCanvas(elements.previewAnim);
-          
-          // Crear controles
-          uiController.createAnimationControls();
-          
-          // Mostrar primer frame
-          if (animationEngine.frames.length > 0) {
-            animationEngine.renderFrame(elements.previewAnim, animationEngine.frames[0], animationEngine.atlasImage);
-            elements.frameInfo.textContent = `Frame: 1 / ${frameCount}`;
-          }
-
-          uiController.updateAnimationInfo();
-          utils.setStatus(`Animación procesada: ${frameCount} frames`);
-        } else {
-          utils.setStatus('No se pudieron extraer frames de la animación');
+        if (frameCount === 0) {
+          utils.setStatus('❌ No se encontraron frames en la animación', true);
+          return false;
         }
+
+        utils.setStatus(`✅ ${frameCount} frames detectados. Listo para exportar.`);
+        return true;
+
       } catch (error) {
-        utils.setStatus('Error al procesar animación: ' + error.message);
+        utils.setStatus(`❌ Error al procesar animación: ${error.message}`, true);
+        return false;
+      } finally {
+        uiController.setLoadingState(false);
       }
     }
   };
 
   // Sistema de exportación
   const exportSystem = {
-    exportAnimation: async () => {
-      if (!animationEngine || !animationEngine.frames.length) {
-        utils.setStatus('No hay animación para exportar');
-        return null;
+    exportFrames: async () => {
+      if (!frameExtractor || frameExtractor.frames.length === 0) {
+        utils.setStatus('❌ No hay frames para exportar', true);
+        return false;
       }
 
+      uiController.setLoadingState(true);
+      
       try {
-        utils.setStatus('Exportando animación...');
-        
-        const zip = new JSZip();
-        
-        await animationEngine.exportFrames(zip, (current, total) => {
-          utils.setStatus(`Exportando frame ${current}/${total}...`);
+        const info = frameExtractor.getInfo();
+        utils.setStatus(`🎬 Exportando ${info.totalFrames} frames...`);
+
+        // Exportar frames a ZIP
+        const result = await frameExtractor.exportFramesToZip((current, total, exported, errors) => {
+          const progress = Math.round((current / total) * 100);
+          utils.setStatus(`📤 Exportando... ${progress}% (${exported}/${total} frames, ${errors} errores)`);
         });
 
-        utils.setStatus('Comprimiendo archivo ZIP...');
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        
-        return zipBlob;
-      } catch (error) {
-        utils.setStatus('Error al exportar animación: ' + error.message);
-        throw error;
-      }
-    },
-
-    exportAtlasPieces: async () => {
-      if (!animationEngine?.atlasImage || !animationEngine?.atlasData) {
-        utils.setStatus('No hay atlas para exportar');
-        return null;
-      }
-
-      try {
-        utils.setStatus('Exportando piezas del atlas...');
-        
-        const zip = new JSZip();
-        const sprites = animationEngine.atlasData.ATLAS.SPRITES;
-        
-        const folder = zip.folder('pieces');
-        const canvas = document.createElement('canvas');
-
-        for (let i = 0; i < sprites.length; i++) {
-          const sprite = sprites[i].SPRITE;
-          const name = (sprite.name || `piece_${i}`).replace(/\s+/g, '_') + '.png';
-
-          canvas.width = sprite.w;
-          canvas.height = sprite.h;
-          
-          canvas.getContext('2d').drawImage(
-            animationEngine.atlasImage, sprite.x, sprite.y, sprite.w, sprite.h,
-            0, 0, sprite.w, sprite.h
-          );
-          
-          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-          folder.file(name, blob);
-
-          utils.setStatus(`Recortando ${name} (${i + 1}/${sprites.length})`);
-          await new Promise(r => setTimeout(r, 0));
+        if (result.exportedCount === 0) {
+          utils.setStatus('❌ No se pudo exportar ningún frame', true);
+          return false;
         }
 
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        return zipBlob;
+        // Generar nombre de archivo con información
+        const animName = info.animationName.replace(/[^a-zA-Z0-9]/g, '_');
+        const filename = `animation_${animName}_${info.totalFrames}frames.zip`;
+
+        utils.setStatus('📦 Comprimiendo archivo ZIP...');
+        
+        // Generar ZIP
+        const zipBlob = await result.zip.generateAsync({ 
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+
+        // Descargar archivo
+        utils.downloadFile(zipBlob, filename);
+        
+        utils.setStatus(`✅ Exportación completada: ${result.exportedCount} frames exportados`);
+        return true;
+
       } catch (error) {
-        utils.setStatus('Error al exportar atlas: ' + error.message);
-        throw error;
+        utils.setStatus(`❌ Error al exportar: ${error.message}`, true);
+        return false;
+      } finally {
+        uiController.setLoadingState(false);
       }
+    }
+  };
+
+  // Sistema de validación
+  const validator = {
+    validateFiles: () => {
+      if (!frameExtractor) {
+        return { valid: false, message: 'Sistema no inicializado' };
+      }
+
+      if (!frameExtractor.atlasImage) {
+        return { valid: false, message: 'Falta el archivo PNG del spritemap' };
+      }
+
+      if (!frameExtractor.atlasData) {
+        return { valid: false, message: 'Falta el archivo JSON del atlas' };
+      }
+
+      if (!frameExtractor.animationData) {
+        return { valid: false, message: 'Falta el archivo JSON de animación' };
+      }
+
+      return { valid: true, message: 'Todos los archivos están cargados' };
     }
   };
 
@@ -359,15 +272,12 @@
       dropBoxPng: document.getElementById('dropBoxPng'),
       dropBoxAtlas: document.getElementById('dropBoxAtlas'),
       dropBoxAnim: document.getElementById('dropBoxAnim'),
-      previewPNG: document.getElementById('previewPNG'),
-      previewAnim: document.getElementById('previewAnim'),
       statusEl: document.getElementById('status'),
-      convertBtn: document.getElementById('convertir'),
-      openZipBtn: document.getElementById('openZipTab')
+      convertBtn: document.getElementById('convertir')
     };
 
-    // Crear instancia del motor de animación
-    animationEngine = new AnimationEngine();
+    // Crear instancia del extractor
+    frameExtractor = new FrameExtractor();
 
     // Configurar drag & drop
     uiController.setupDragDrop(elements.dropBoxPng, elements.pngInput, fileHandlers.handlePngFile);
@@ -376,52 +286,26 @@
 
     // Configurar botón de conversión
     elements.convertBtn.addEventListener('click', async () => {
-      if (!animationEngine) {
-        utils.setStatus('El sistema no está inicializado');
+      if (isProcessing) {
+        utils.setStatus('⏳ Ya hay un proceso en curso...');
         return;
       }
 
-      try {
-        elements.convertBtn.disabled = true;
-        
-        let zipBlob;
-        
-        // Si hay animación cargada, exportar frames
-        if (animationEngine.frames.length > 0) {
-          zipBlob = await exportSystem.exportAnimation();
-        } 
-        // Si solo hay atlas, exportar piezas
-        else if (animationEngine.atlasData) {
-          zipBlob = await exportSystem.exportAtlasPieces();
-        } else {
-          utils.setStatus('Por favor carga al menos el spritemap y el atlas');
-          return;
-        }
+      // Validar archivos
+      const validation = validator.validateFiles();
+      if (!validation.valid) {
+        utils.setStatus(`❌ ${validation.message}`, true);
+        return;
+      }
 
-        if (zipBlob) {
-          // Crear enlace de descarga
-          const url = URL.createObjectURL(zipBlob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = animationEngine.frames.length > 0 ? 'animation_frames.zip' : 'atlas_pieces.zip';
-          a.click();
-          
-          URL.revokeObjectURL(url);
-          utils.setStatus('Exportación completada exitosamente');
-        }
-      } catch (error) {
-        utils.setStatus('Error en la exportación: ' + error.message);
-      } finally {
-        elements.convertBtn.disabled = false;
+      // Procesar y exportar
+      const processed = await fileHandlers.processExtraction();
+      if (processed) {
+        await exportSystem.exportFrames();
       }
     });
 
-    // Configurar botón de abrir ZIP (si se necesita)
-    elements.openZipBtn.addEventListener('click', () => {
-      utils.setStatus('Función no implementada aún');
-    });
-
-    utils.setStatus('🚀 Sistema inicializado. Carga los archivos para comenzar.');
+    utils.setStatus('🚀 Sistema listo. Carga los tres archivos para comenzar.');
   };
 
   // Iniciar cuando el DOM esté listo

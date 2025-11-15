@@ -3,55 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Spritemap Animator & Exporter</title>
+  <title>Frame Extractor - Adobe Animate</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>🎬 Spritemap Animator & Exporter</h1>
+  <h1>🎬 Frame Extractor</h1>
+  <p class="subtitle">Extrae frames de animaciones de Adobe Animate</p>
   
   <!-- Drop & Box PNG -->
   <div class="inputs" id="dropBoxPng">
     <label>🖼️ Spritemap PNG:
       <input id="pngInput" type="file" accept="image/png">
     </label>
-    <canvas id="previewPNG" style="display:none;"></canvas>
   </div>
 
   <!-- Drop & Box Atlas JSON -->
   <div class="inputs" id="dropBoxAtlas">
-    <label>📋 Atlas JSON (spritemap.json):
+    <label>📋 Atlas JSON:
       <input id="jsonInput" type="file" accept=".json">
     </label>
   </div>
 
   <!-- Drop & Box Anim JSON -->
   <div class="inputs" id="dropBoxAnim">
-    <label>🎞️ Animation JSON (opcional):
+    <label>🎞️ Animation JSON:
       <input id="animInput" type="file" accept=".json">
     </label>
-    <canvas id="previewAnim" style="display:none;"></canvas>
   </div>
 
-  <!-- Controles principales -->
+  <!-- Controles -->
   <div class="controls">
-    <button id="convertir">📦 Exportar a ZIP</button>
-    <button id="openZipTab" style="display:none;">🌐 Abrir ZIP en nueva pestaña</button>
+    <button id="convertir">📦 Extraer Frames</button>
   </div>
 
   <!-- Estado -->
-  <p id="status">🚀 Esperando archivos... Carga el spritemap PNG y el atlas JSON para comenzar.</p>
+  <div id="status">🚀 Carga los tres archivos para comenzar la extracción</div>
 
   <!-- Librería JSZip -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- Motor de animación -->
-  <script src="animationEngine.js"></script>
+  <!-- Frame Extractor -->
+  <script src="frameExtractor.js"></script>
 
   <!-- Script principal -->
   <script src="main.js"></script>
 
   <footer class="footer">
-    <p>✨ Sistema de animación y exportación de spritemaps | Desarrollado con tecnología web moderna</p>
+    <p>ya me canse</p>
   </footer>
 </body>
 </html>
