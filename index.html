@@ -3,53 +3,61 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Frame Extractor - Adobe Animate</title>
+  <title>Spritemap to funky</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>🎬 Frame Extractor</h1>
-  <p class="subtitle">Extrae frames de animaciones de Adobe Animate</p>
-  
+  <h1>Conversor Spritemap → PNGS individuales (ZIP)</h1>
+
   <!-- Drop & Box PNG -->
   <div class="inputs" id="dropBoxPng">
-    <label>🖼️ Spritemap PNG:
+    <p class="dropText">Arrastra tu PNG aquí o usa el botón</p>
+    <label>PNG SpriteMap de Adobe Animate:
       <input id="pngInput" type="file" accept="image/png">
     </label>
+    <canvas id="previewPNG" style="display:none; margin-top:10px; border:1px solid #666;"></canvas>
   </div>
 
   <!-- Drop & Box Atlas JSON -->
   <div class="inputs" id="dropBoxAtlas">
-    <label>📋 Atlas JSON:
+    <p class="dropText">Arrastra tu Atlas JSON aquí o usa el botón</p>
+    <label>JSON del atlas/lleva el mismo nombre de la animacion:
       <input id="jsonInput" type="file" accept=".json">
     </label>
   </div>
 
   <!-- Drop & Box Anim JSON -->
   <div class="inputs" id="dropBoxAnim">
-    <label>🎞️ Animation JSON:
+    <p class="dropText">Arrastra tu Animation JSON aquí o usa el botón (opcional)</p>
+    <label>Animation.json/a lo que veo siempre lleva "Animation.json"(opcional):
       <input id="animInput" type="file" accept=".json">
     </label>
+    <canvas id="previewAnim" style="display:none; margin-top:10px; border:1px solid #666;"></canvas>
   </div>
 
-  <!-- Controles -->
   <div class="controls">
-    <button id="convertir">📦 Extraer Frames</button>
+    <button id="convertir">Exportar a ZIP</button>
+    <button id="openZipTab" style="display:none">Abrir ZIP en nueva pestaña</button>
   </div>
 
-  <!-- Estado -->
-  <div id="status">🚀 Carga los tres archivos para comenzar la extracción</div>
+  <p id="status">Esperando archivos...</p>
 
   <!-- Librería JSZip -->
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-  <!-- Frame Extractor -->
-  <script src="frameExtractor.js"></script>
-
-  <!-- Script principal -->
-  <script src="main.js"></script>
+  <!-- Módulos -->
+  <script src="atlas.js"></script>
+  <script src="anims.js"></script>
+  <script src="ui.js"></script>
+  <script src="animModule.js"></script>
 
   <footer class="footer">
-    <p>ya me canse</p>
+    <p>Todo lo que pasa por esta pagina... solo son test, ,me cago en foxy</p>
   </footer>
 </body>
 </html>
+
+
+
+
+<!-- en tu index.html <script src="ui.js"></script> -->

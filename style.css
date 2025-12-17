@@ -13,7 +13,7 @@ body {
 
 /* Encabezado */
 h1 {
-    margin-bottom: 10px;
+    margin-bottom: 25px;
     font-size: 2.5rem;
     text-align: center;
     letter-spacing: 1px;
@@ -22,39 +22,30 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-.subtitle {
-    margin-bottom: 30px;
-    font-size: 1.1rem;
-    color: #b0b0b0;
-    text-align: center;
-}
-
 /* ======== Inputs ======== */
 .inputs {
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 18px;
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(12px);
-    border-radius: 15px;
+    border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.15);
-    padding: 20px;
+    padding: 25px;
     width: 100%;
-    max-width: 500px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-    margin-bottom: 20px;
-    transition: all 0.3s ease;
+    max-width: 620px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
-
 .inputs:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 25px rgba(0, 0, 0, 0.5);
+    transform: translateY(-4px);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.7);
 }
 
 .inputs label {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     font-size: 1rem;
     font-weight: bold;
     color: #dcdcdc;
@@ -62,162 +53,147 @@ h1 {
 
 /* Input de archivo estilizado */
 .inputs input[type="file"] {
-    padding: 12px 15px;
+    padding: 10px 14px;
     border-radius: 8px;
     background-color: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.2);
     color: #e0e0e0;
     cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 0.95rem;
+    transition: background-color 0.3s, transform 0.2s;
 }
-
-.inputs input[type="file"]:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
 .inputs input[type="file"]::-webkit-file-upload-button {
     background: linear-gradient(135deg, #3a3ad9, #6a0dad);
     border: none;
     border-radius: 6px;
-    padding: 8px 16px;
+    padding: 8px 14px;
     color: #fff;
     font-weight: 600;
     cursor: pointer;
     margin-right: 12px;
-    transition: all 0.3s ease;
+    transition: background 0.3s, transform 0.2s;
 }
-
 .inputs input[type="file"]::-webkit-file-upload-button:hover {
     background: linear-gradient(135deg, #5f5fff, #8e2de2);
     transform: scale(1.05);
 }
 
+/* ======== Caja drag & drop ======== */
+.drop-box {
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 15px;
+    padding: 30px;
+    text-align: center;
+    margin: 25px 0;
+    transition: background 0.3s, border-color 0.3s, color 0.3s;
+    color: #bbb;
+    font-size: 1.1rem;
+    max-width: 620px;
+    width: 100%;
+}
+.drop-box.dragover {
+    background: rgba(0, 224, 255, 0.08);
+    border-color: #00e0ff;
+    color: #00e0ff;
+}
+
 /* ======== Botones ======== */
 .controls {
+    margin-top: 25px;
     display: flex;
-    gap: 15px;
-    margin: 25px 0;
     flex-wrap: wrap;
     justify-content: center;
+    gap: 14px;
 }
 
 button {
-    padding: 15px 30px;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #3a3ad9, #6a0dad);
+    color: #fff;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, #00e0ff, #9b5eff);
-    color: white;
-    font-weight: bold;
     cursor: pointer;
-    transition: all 0.3s ease;
     font-size: 1.1rem;
-    box-shadow: 0 4px 15px rgba(0, 224, 255, 0.3);
-    min-width: 200px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    transition: background 0.4s, transform 0.2s;
+    min-width: 170px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
 }
-
-button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0, 224, 255, 0.4);
+button:hover:not(:disabled) {
+    background: linear-gradient(135deg, #5f5fff, #8e2de2);
+    transform: translateY(-2px);
 }
-
-button:active {
-    transform: translateY(-1px);
-}
-
 button:disabled {
-    opacity: 0.6;
+    background: #555;
     cursor: not-allowed;
-    transform: none;
-    background: linear-gradient(135deg, #666, #888);
-    box-shadow: none;
+    opacity: 0.6;
 }
 
-/* ======== Estado ======== */
+/* Botón secundario (abrir ZIP) */
+#openZipTab {
+    background: linear-gradient(135deg, #ff6b6b, #ff3c7d);
+}
+#openZipTab:hover {
+    background: linear-gradient(135deg, #ff4c4c, #ff1f5a);
+}
+
+/* ======== Status ======== */
 #status {
-    margin: 20px 0;
-    padding: 15px 25px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    border-left: 4px solid #00e0ff;
-    font-weight: 500;
+    margin-top: 18px;
     text-align: center;
-    min-height: 20px;
-    max-width: 600px;
-    width: 100%;
-}
-
-#status.error {
-    border-left-color: #ff6b6b;
-    background: rgba(255, 107, 107, 0.1);
-    color: #ff6b6b;
+    font-size: 1rem;
+    color: #bdbdbd;
 }
 
 /* ======== Footer ======== */
-.footer {
-    margin-top: auto;
-    padding: 20px;
+footer {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(8px);
+    color: #eaeaea;
     text-align: center;
-    color: #888;
-    font-size: 0.9rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 22px;
+    margin-top: 50px;
+    border-radius: 20px;
     width: 100%;
+    max-width: 620px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+footer p {
+    margin: 6px 0;
 }
 
-/* ======== Responsive ======== */
+/* ======== Responsivo ======== */
 @media (max-width: 768px) {
+    button {
+        width: 90%;
+        font-size: 1.1rem;
+    }
     h1 {
         font-size: 2rem;
     }
-    
-    .subtitle {
-        font-size: 1rem;
+    .inputs,
+    .drop-box,
+    footer {
+        max-width: 95%;
     }
-    
-    .inputs {
-        padding: 15px;
-        margin: 10px 0;
+}
+
+@media (max-width: 480px) {
+    body {
+        padding: 12px;
     }
-    
     button {
-        padding: 12px 24px;
+        width: 80%;
         font-size: 1rem;
-        min-width: 150px;
     }
-    
-    #status {
-        margin: 15px 10px;
-        padding: 12px 20px;
-        font-size: 0.95rem;
+    h1 {
+        font-size: 1.6rem;
     }
-}
-
-/* ======== Animaciones ======== */
-@keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-    100% { transform: scale(1); }
-}
-
-.inputs.hover {
-    animation: pulse 0.3s ease-in-out;
-}
-
-/* ======== Scrollbar personalizada ======== */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-::-webkit-scrollbar-thumb {
-    background: linear-gradient(135deg, #00e0ff, #9b5eff);
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(135deg, #9b5eff, #00e0ff);
+    .inputs,
+    .drop-box,
+    footer {
+        width: 100%;
+        max-width: 100%;
+        border-radius: 12px;
+    }
 }
