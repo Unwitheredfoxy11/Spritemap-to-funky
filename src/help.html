@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¿Ocupas ayuda?</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            line-height: 1.6;
+            background-color: aquamarine;
+        }
+        h1 {
+            color: #333;
+        }
+        h2 {
+            color: #555;
+            margin-top: 20px;
+        }
+        p {
+            margin-bottom: 10px;
+        }
+
+        /* Contenedor con perspectiva */
+        .flip-container {
+            perspective: 1000px; /* cuanto más alto, menos exagerada la perspectiva */
+            width: 300px; /* ancho del contenedor */
+            height: 300px; /* alto del contenedor */
+            margin: 50px auto;
+        }
+
+        /* La imagen rotativa */
+        #Rotator-png {
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d; /* necesario para que rotateY se vea 3D */
+            transition: transform 0.2s linear; /* suaviza los cambios de transform */
+            backface-visibility: hidden; /* evita que se vea "al revés" al girar */
+        }
+    </style>
+    <link rel="icon" href="./listo.ico" type="image/x-icon">
+</head>
+<body>
+    <h1>Ayuda para usar el conversor Spritemap → PNGs individuales (ZIP)</h1>
+    <h2>Paso #1</h2>
+    <p>No estes chingando porque no esta terminado</p>
+
+
+    <div class="flip-container">
+        <img id="rotator-png" src="./fuap.png" alt="XD">
+    </div>
+
+
+    <!--Script-->
+    <script>
+    let angle = 0;
+    const img = document.getElementById('rotator-png');
+
+    setInterval(() => {
+      angle = (angle + 4) % 360;
+    img.style.transform = `rotateY(${angle}deg)`;
+    }, 20);
+</script>
+</body>
+</html>

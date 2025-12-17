@@ -1,10 +1,11 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Spritemap to funky</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./src/style.css">
+  <link rel="icon" href="./src/listo.ico" type="image/x-icon">
 </head>
 <body>
   <h1>Conversor Spritemap → PNGS individuales (ZIP)</h1>
@@ -46,13 +47,19 @@
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <!-- Módulos -->
-  <script src="atlas.js"></script>
-  <script src="anims.js"></script>
-  <script src="ui.js"></script>
-  <script src="animModule.js"></script>
+  <script src="src/atlas.js"></script>
+  <script src="src/anims.js"></script>
+  <script src="src/ui.js"></script>
+  <script src="src/animModule.js"></script>
 
   <footer class="footer">
-    <p>Todo lo que pasa por esta pagina... solo son test, ,me cago en foxy</p>
+    <p>Todo lo que pasa por esta pagina... se queda en esta pagina, si necesitas ayuda toca aqui</p>
+    <button id="helpButton">Ayuda</button>
+    <script>
+      document.getElementById('helpButton').onclick = function() {
+        window.location.href = 'src/help.html';
+      };
+    </script>
   </footer>
 </body>
 </html>
